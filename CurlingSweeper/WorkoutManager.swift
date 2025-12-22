@@ -1,0 +1,587 @@
+//
+//  WorkoutManager.swift
+//  CurlingSweeper
+//
+//  Created by JEREMY KARN on 2025-12-21.
+//
+
+import Foundation
+import HealthKit
+import Observation
+import CoreMotion
+
+// MARK: - Rock Position
+
+enum RockPosition: Int, CaseIterable, Identifiable, Comparable {
+    case hog = 0
+    case weight1 = 1
+    case weight2 = 2
+    case weight3 = 3
+    case weight4 = 4
+    case weight5 = 5
+    case weight6 = 6
+    case weight7 = 7
+    case weight8 = 8
+    case weight9 = 9
+    case weight10 = 10
+    case hack = 11
+    case board = 12
+    case hit = 13
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .hog: return "HOG"
+        case .weight1: return "1"
+        case .weight2: return "2"
+        case .weight3: return "3"
+        case .weight4: return "4"
+        case .weight5: return "5"
+        case .weight6: return "6"
+        case .weight7: return "7"
+        case .weight8: return "8"
+        case .weight9: return "9"
+        case .weight10: return "10"
+        case .hack: return "HACK"
+        case .board: return "BOARD"
+        case .hit: return "HIT"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .hog: return "Hogged (didn't reach)"
+        case .weight1, .weight2, .weight3, .weight4, .weight5,
+             .weight6, .weight7, .weight8, .weight9, .weight10:
+            return "Weight \(rawValue)"
+        case .hack: return "Through to hack"
+        case .board: return "Hit the board"
+        case .hit: return "Takeout"
+        }
+    }
+
+    static func < (lhs: RockPosition, rhs: RockPosition) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
+@Observable
+@MainActor
+final class WorkoutManager {
+
+    // MARK: - Observable Properties
+
+    var isWorkoutActive = false
+    var isPaused = false
+    var heartRate: Double = 0
+    var elapsedTime: TimeInterval = 0
+
+    // Stopwatch properties
+    var isStopwatchRunning = false
+    var stopwatchTime: TimeInterval = 0
+
+    // Rock position estimation
+    var currentEstimate: RockPosition?
+    var showPositionPicker = false
+
+    // End tracking
+    var currentEnd: Int = 0
+
+    // Brush stroke counting
+    var strokeCountEnd: Int = 0      // Strokes in current end
+    var strokeCountTotal: Int = 0    // Total strokes in workout
+
+    // MARK: - Private Properties
+
+    private let healthStore = HKHealthStore()
+    private var session: HKWorkoutSession?
+    private var builder: HKLiveWorkoutBuilder?
+    private var startDate: Date?
+
+    // Motion detection
+    private let motionManager = CMMotionManager()
+    private var lastYAcceleration: Double = 0
+    private var sweepPhase: SweepPhase = .idle
+    private var accelerationHistory: [Double] = []
+
+    private enum SweepPhase {
+        case idle
+        case sweepingPositive  // Moving in +Y direction
+        case sweepingNegative  // Moving in -Y direction
+    }
+
+    // Sweep detection thresholds (from Garmin app, adjusted for CoreMotion)
+    // CoreMotion uses g units (1g = 9.8 m/s²), Garmin used milli-g
+    private let sweepThreshold: Double = 1.0  // 1g threshold for sweep detection
+    private let sweepHistorySize: Int = 10    // Samples to track
+    private var timer: Timer?
+    private var delegateHandler: WorkoutDelegateHandler?
+    private var stopwatchStartDate: Date?
+
+    // Split times in seconds (default values from Garmin app, converted from ms)
+    // Index 0 = HOG, 1-10 = weights, 11 = HACK, 12 = BOARD, 13 = HIT
+    private var splitTimes: [TimeInterval] = [
+        99.999,  // HOG (essentially infinite - rock didn't make it)
+        4.400,   // Weight 1
+        4.300,   // Weight 2
+        4.200,   // Weight 3
+        4.100,   // Weight 4
+        4.000,   // Weight 5
+        3.900,   // Weight 6
+        3.800,   // Weight 7
+        3.700,   // Weight 8
+        3.600,   // Weight 9
+        3.500,   // Weight 10
+        3.400,   // HACK
+        3.300,   // BOARD
+        3.200    // HIT
+    ]
+
+    // Recorded times (-1 means not yet recorded)
+    private var recordedTimes: [TimeInterval] = Array(repeating: -1, count: 14)
+
+    // MARK: - Initialization
+
+    init() {}
+
+    // MARK: - Authorization
+
+    func requestAuthorization() async -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            return false
+        }
+
+        let typesToShare: Set<HKSampleType> = [
+            HKObjectType.workoutType()
+        ]
+
+        let typesToRead: Set<HKObjectType> = [
+            HKObjectType.quantityType(forIdentifier: .heartRate)!,
+            HKObjectType.workoutType()
+        ]
+
+        do {
+            try await healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead)
+            return true
+        } catch {
+            print("HealthKit authorization failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    // MARK: - Workout Session Control
+
+    func startWorkout() async {
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .other
+        configuration.locationType = .indoor
+
+        do {
+            session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
+            builder = session?.associatedWorkoutBuilder()
+
+            // Create delegate handler
+            delegateHandler = WorkoutDelegateHandler(manager: self)
+            session?.delegate = delegateHandler
+            builder?.delegate = delegateHandler
+
+            builder?.dataSource = HKLiveWorkoutDataSource(
+                healthStore: healthStore,
+                workoutConfiguration: configuration
+            )
+
+            let start = Date()
+            session?.startActivity(with: start)
+            try await builder?.beginCollection(at: start)
+
+            startDate = start
+            isWorkoutActive = true
+            isPaused = false
+            currentEnd = 1
+            startTimer()
+            startMotionUpdates()
+
+        } catch {
+            print("Failed to start workout: \(error.localizedDescription)")
+        }
+    }
+
+    func pauseWorkout() {
+        session?.pause()
+        isPaused = true
+        stopTimer()
+    }
+
+    func resumeWorkout() {
+        session?.resume()
+        isPaused = false
+        startTimer()
+    }
+
+    func endWorkout() async {
+        session?.end()
+        stopTimer()
+
+        do {
+            try await builder?.endCollection(at: Date())
+            try await builder?.finishWorkout()
+        } catch {
+            print("Failed to end workout: \(error.localizedDescription)")
+        }
+
+        resetState()
+    }
+
+    func discardWorkout() async {
+        session?.end()
+        stopTimer()
+
+        builder?.discardWorkout()
+
+        resetState()
+    }
+
+    private func resetState() {
+        isWorkoutActive = false
+        isPaused = false
+        heartRate = 0
+        elapsedTime = 0
+        currentEnd = 0
+        resetStopwatch()
+        stopMotionUpdates()
+        resetStrokeCount()
+        session = nil
+        builder = nil
+        startDate = nil
+        delegateHandler = nil
+    }
+
+    // MARK: - End Tracking
+
+    func markNewEnd() {
+        currentEnd += 1
+        resetStopwatch()
+        strokeCountEnd = 0  // Reset per-end stroke count
+    }
+
+    // MARK: - Brush Stroke Detection
+
+    private func startMotionUpdates() {
+        guard motionManager.isAccelerometerAvailable else {
+            print("Accelerometer not available")
+            return
+        }
+
+        motionManager.accelerometerUpdateInterval = 1.0 / 25.0  // 25Hz like Garmin app
+        motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, error in
+            guard let self = self, let data = data else { return }
+            Task { @MainActor in
+                self.processAccelerometerData(data)
+            }
+        }
+    }
+
+    private func stopMotionUpdates() {
+        motionManager.stopAccelerometerUpdates()
+        accelerationHistory.removeAll()
+        sweepPhase = .idle
+        lastYAcceleration = 0
+    }
+
+    private func processAccelerometerData(_ data: CMAccelerometerData) {
+        let yAccel = data.acceleration.y
+
+        // Add to history
+        accelerationHistory.append(yAccel)
+        if accelerationHistory.count > sweepHistorySize {
+            accelerationHistory.removeFirst()
+        }
+
+        // Detect sweep based on threshold crossing and direction change
+        detectSweep(currentY: yAccel)
+
+        lastYAcceleration = yAccel
+    }
+
+    private func detectSweep(currentY: Double) {
+        // Simple threshold-based detection:
+        // A sweep is detected when acceleration crosses threshold and reverses direction
+
+        switch sweepPhase {
+        case .idle:
+            if currentY > sweepThreshold {
+                sweepPhase = .sweepingPositive
+            } else if currentY < -sweepThreshold {
+                sweepPhase = .sweepingNegative
+            }
+
+        case .sweepingPositive:
+            if currentY < -sweepThreshold {
+                // Completed a sweep cycle (positive to negative)
+                countStroke()
+                sweepPhase = .sweepingNegative
+            } else if abs(currentY) < sweepThreshold * 0.5 {
+                // Returned to neutral without completing sweep
+                sweepPhase = .idle
+            }
+
+        case .sweepingNegative:
+            if currentY > sweepThreshold {
+                // Completed a sweep cycle (negative to positive)
+                countStroke()
+                sweepPhase = .sweepingPositive
+            } else if abs(currentY) < sweepThreshold * 0.5 {
+                // Returned to neutral without completing sweep
+                sweepPhase = .idle
+            }
+        }
+    }
+
+    private func countStroke() {
+        strokeCountEnd += 1
+        strokeCountTotal += 1
+    }
+
+    private func resetStrokeCount() {
+        strokeCountEnd = 0
+        strokeCountTotal = 0
+        accelerationHistory.removeAll()
+        sweepPhase = .idle
+    }
+
+    // MARK: - Timer
+
+    private func startTimer() {
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateElapsedTime()
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func updateElapsedTime() {
+        guard let startDate = startDate else { return }
+        elapsedTime = Date().timeIntervalSince(startDate)
+
+        // Update stopwatch if running
+        if isStopwatchRunning, let stopwatchStart = stopwatchStartDate {
+            stopwatchTime = Date().timeIntervalSince(stopwatchStart)
+            updateEstimate()
+        }
+    }
+
+    // MARK: - Stopwatch
+
+    func toggleStopwatch() {
+        if isStopwatchRunning {
+            // Stop the stopwatch, keep the time displayed
+            isStopwatchRunning = false
+            stopwatchStartDate = nil
+            // Show position picker to record where rock stopped
+            if stopwatchTime > 0 {
+                showPositionPicker = true
+            }
+        } else {
+            // Start fresh stopwatch
+            stopwatchTime = 0
+            stopwatchStartDate = Date()
+            isStopwatchRunning = true
+            currentEstimate = nil
+            showPositionPicker = false
+        }
+    }
+
+    func resetStopwatch() {
+        isStopwatchRunning = false
+        stopwatchTime = 0
+        stopwatchStartDate = nil
+        currentEstimate = nil
+    }
+
+    // MARK: - Rock Position Estimation
+
+    /// Returns the estimated rock position based on current stopwatch time
+    func getStopwatchEstimate() -> RockPosition? {
+        guard stopwatchTime > 0 else { return nil }
+
+        // Find the position where the time is less than or equal to the split time
+        // Faster times = further positions (lower split time index = shorter/slower)
+        for i in stride(from: splitTimes.count - 1, through: 0, by: -1) {
+            if stopwatchTime <= splitTimes[i] {
+                return RockPosition(rawValue: i)
+            }
+        }
+        return .hog
+    }
+
+    /// Updates the current estimate (called by timer)
+    private func updateEstimate() {
+        if isStopwatchRunning {
+            currentEstimate = getStopwatchEstimate()
+        }
+    }
+
+    /// Records where a rock actually stopped and adjusts future estimates
+    func recordSplit(position: RockPosition) {
+        guard stopwatchTime > 0 else { return }
+
+        let index = position.rawValue
+        let time = stopwatchTime
+
+        // Record this time for the position
+        // For HOG: only record if faster than existing (rock was going faster than expected)
+        // For HIT: only record if slower than existing
+        // For other positions: always record
+        if index > 0 && index < recordedTimes.count - 1 {
+            recordedTimes[index] = time
+        } else if index == 0 && (recordedTimes[index] < 0 || recordedTimes[index] > time) {
+            recordedTimes[index] = time
+        } else if index == recordedTimes.count - 1 && (recordedTimes[index] < 0 || recordedTimes[index] < time) {
+            recordedTimes[index] = time
+        }
+
+        // Invalidate inconsistent records
+        for i in 0..<recordedTimes.count {
+            if i < index && recordedTimes[i] >= 0 && recordedTimes[i] <= time {
+                // Faster time recorded for shorter throw - ice may have sped up
+                recordedTimes[i] = -1
+            }
+            if i > index && recordedTimes[i] >= 0 && recordedTimes[i] >= time {
+                // Slower time recorded for longer throw - ice may have slowed down
+                recordedTimes[i] = -1
+            }
+        }
+
+        // Recalculate split times based on recorded data
+        recalculateSplitTimes()
+
+        // Hide picker and reset for next timing
+        showPositionPicker = false
+    }
+
+    /// Recalculates split times based on recorded observations
+    private func recalculateSplitTimes() {
+        var lastRecordedIndex = -1
+        var averageDiff: TimeInterval = 0.100  // Default 100ms between positions
+
+        for i in 0..<recordedTimes.count {
+            if recordedTimes[i] > 0 {
+                splitTimes[i] = recordedTimes[i]
+
+                if lastRecordedIndex >= 0 {
+                    // Calculate average time difference between recorded positions
+                    averageDiff = (recordedTimes[lastRecordedIndex] - recordedTimes[i]) / Double(i - lastRecordedIndex)
+
+                    // Fill in gaps between last recorded and current
+                    for j in (lastRecordedIndex + 1)..<i {
+                        splitTimes[j] = recordedTimes[lastRecordedIndex] - Double(j - lastRecordedIndex) * averageDiff
+                    }
+                } else if i > 0 {
+                    // No previous record, extrapolate backwards
+                    for j in stride(from: i - 1, through: 0, by: -1) {
+                        splitTimes[j] = recordedTimes[i] + Double(i - j) * averageDiff
+                    }
+                }
+
+                lastRecordedIndex = i
+            }
+        }
+
+        // Extrapolate forward from last recorded position
+        if lastRecordedIndex >= 0 && lastRecordedIndex < recordedTimes.count - 1 {
+            for j in (lastRecordedIndex + 1)..<recordedTimes.count {
+                splitTimes[j] = recordedTimes[lastRecordedIndex] - Double(j - lastRecordedIndex) * averageDiff
+            }
+        }
+    }
+
+    // MARK: - Formatting Helpers
+
+    func formattedElapsedTime() -> String {
+        let minutes = Int(elapsedTime) / 60
+        let seconds = Int(elapsedTime) % 60
+        let tenths = Int((elapsedTime.truncatingRemainder(dividingBy: 1)) * 10)
+        return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
+    }
+
+    func formattedStopwatchTime() -> String {
+        let seconds = Int(stopwatchTime)
+        let milliseconds = Int((stopwatchTime.truncatingRemainder(dividingBy: 1)) * 1000)
+        return String(format: "%02d.%03d", seconds, milliseconds)
+    }
+
+    // MARK: - Delegate Callbacks
+
+    fileprivate func handleSessionStateChange(to state: HKWorkoutSessionState) {
+        switch state {
+        case .running:
+            isWorkoutActive = true
+            isPaused = false
+        case .paused:
+            isPaused = true
+        case .ended:
+            isWorkoutActive = false
+            isPaused = false
+        default:
+            break
+        }
+    }
+
+    fileprivate func handleHeartRateUpdate(_ value: Double) {
+        heartRate = value
+    }
+}
+
+// MARK: - Delegate Handler
+
+private class WorkoutDelegateHandler: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
+    private weak var manager: WorkoutManager?
+
+    init(manager: WorkoutManager) {
+        self.manager = manager
+        super.init()
+    }
+
+    func workoutSession(_ workoutSession: HKWorkoutSession,
+                        didChangeTo toState: HKWorkoutSessionState,
+                        from fromState: HKWorkoutSessionState,
+                        date: Date) {
+        Task { @MainActor in
+            manager?.handleSessionStateChange(to: toState)
+        }
+    }
+
+    func workoutSession(_ workoutSession: HKWorkoutSession,
+                        didFailWithError error: Error) {
+        print("Workout session failed: \(error.localizedDescription)")
+    }
+
+    func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder,
+                        didCollectDataOf collectedTypes: Set<HKSampleType>) {
+        for type in collectedTypes {
+            guard let quantityType = type as? HKQuantityType,
+                  quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+                continue
+            }
+
+            let statistics = workoutBuilder.statistics(for: quantityType)
+            let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+
+            if let value = statistics?.mostRecentQuantity()?.doubleValue(for: heartRateUnit) {
+                Task { @MainActor in
+                    self.manager?.handleHeartRateUpdate(value)
+                }
+            }
+        }
+    }
+
+    func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {
+        // Handle workout events if needed
+    }
+}

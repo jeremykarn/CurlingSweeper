@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct CurlingSweeperApp: App {
+    @State private var workoutManager = WorkoutManager()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(workoutManager)
         }
     }
 }
