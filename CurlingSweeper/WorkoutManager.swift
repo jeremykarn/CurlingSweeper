@@ -75,6 +75,7 @@ final class WorkoutManager {
     var isWorkoutActive = false
     var isPaused = false
     var heartRate: Double = 0
+    var activeCalories: Double = 0
     var elapsedTime: TimeInterval = 0
 
     // Stopwatch properties
@@ -158,6 +159,7 @@ final class WorkoutManager {
 
         let typesToRead: Set<HKObjectType> = [
             HKObjectType.quantityType(forIdentifier: .heartRate)!,
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.workoutType()
         ]
 
@@ -246,6 +248,7 @@ final class WorkoutManager {
         isWorkoutActive = false
         isPaused = false
         heartRate = 0
+        activeCalories = 0
         elapsedTime = 0
         currentEnd = 0
         resetStopwatch()
@@ -542,6 +545,10 @@ final class WorkoutManager {
     fileprivate func handleHeartRateUpdate(_ value: Double) {
         heartRate = value
     }
+
+    fileprivate func handleCaloriesUpdate(_ value: Double) {
+        activeCalories = value
+    }
 }
 
 // MARK: - Delegate Handler
@@ -571,17 +578,27 @@ private class WorkoutDelegateHandler: NSObject, HKWorkoutSessionDelegate, HKLive
     func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder,
                         didCollectDataOf collectedTypes: Set<HKSampleType>) {
         for type in collectedTypes {
-            guard let quantityType = type as? HKQuantityType,
-                  quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate) else {
-                continue
-            }
+            guard let quantityType = type as? HKQuantityType else { continue }
 
             let statistics = workoutBuilder.statistics(for: quantityType)
-            let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
 
-            if let value = statistics?.mostRecentQuantity()?.doubleValue(for: heartRateUnit) {
-                Task { @MainActor in
-                    self.manager?.handleHeartRateUpdate(value)
+            // Heart rate
+            if quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate) {
+                let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+                if let value = statistics?.mostRecentQuantity()?.doubleValue(for: heartRateUnit) {
+                    Task { @MainActor in
+                        self.manager?.handleHeartRateUpdate(value)
+                    }
+                }
+            }
+
+            // Active calories
+            if quantityType == HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
+                let calorieUnit = HKUnit.kilocalorie()
+                if let value = statistics?.sumQuantity()?.doubleValue(for: calorieUnit) {
+                    Task { @MainActor in
+                        self.manager?.handleCaloriesUpdate(value)
+                    }
                 }
             }
         }

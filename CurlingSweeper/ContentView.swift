@@ -89,14 +89,30 @@ struct WorkoutView: View {
                 workoutManager.toggleStopwatch()
             }
 
-            // Stats grid (2x2)
+            // Stats grid
             VStack(spacing: 8) {
-                // Row 1: End and Strokes
-                HStack(spacing: 32) {
+                // Row 1: End, Calories, Strokes
+                HStack(spacing: 16) {
                     VStack(spacing: 2) {
                         Text("\(workoutManager.currentEnd)")
                             .font(.system(size: 16, weight: .semibold, design: .monospaced))
                         Text("End")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 2) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                            Text(workoutManager.activeCalories > 0
+                                 ? "\(Int(workoutManager.activeCalories))"
+                                 : "--")
+                                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        }
+                        Text("kcal")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
