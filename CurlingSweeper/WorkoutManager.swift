@@ -100,20 +100,15 @@ final class WorkoutManager {
     private var builder: HKLiveWorkoutBuilder?
     private var startDate: Date?
 
-    // Motion detection
+    // Motion detection - Garmin algorithm
     private let motionManager = CMMotionManager()
-    private var lastYAcceleration: Double = 0
-    private var sweepPhase: SweepPhase = .idle
 
-    private enum SweepPhase {
-        case idle
-        case sweepingPositive  // Moving in +Y direction
-        case sweepingNegative  // Moving in -Y direction
-    }
-
-    // Sweep detection thresholds (adjusted for sensitivity)
-    // CoreMotion uses g units (1g = 9.8 m/s²)
-    private let sweepThreshold: Double = 0.3  // 0.3g threshold for sweep detection
+    // Sweep detection thresholds (matching Garmin algorithm)
+    // Garmin uses milli-g (1000 = 1g), CoreMotion uses g units
+    private let sweepThresholdY: Double = 1.0  // 1g threshold (same as Garmin's 1000 milli-g)
+    private let sweepWavelength: Int = 10      // Look back up to 10 samples for wave pattern
+    private var yHistory: [Double] = []        // Recent Y acceleration samples
+    private var lastStrokeSampleIndex: Int = -10  // Samples since last counted stroke
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
     private var stopwatchStartDate: Date?
@@ -285,49 +280,67 @@ final class WorkoutManager {
 
     private func stopMotionUpdates() {
         motionManager.stopAccelerometerUpdates()
-        sweepPhase = .idle
-        lastYAcceleration = 0
+        yHistory.removeAll()
+        lastStrokeSampleIndex = -sweepWavelength
     }
 
     private func processAccelerometerData(_ data: CMAccelerometerData) {
         let yAccel = data.acceleration.y
 
-        // Detect sweep based on threshold crossing and direction change
-        detectSweep(currentY: yAccel)
+        // Add to history (keep last sweepWavelength * 2 samples for lookback)
+        yHistory.append(yAccel)
+        let maxHistory = sweepWavelength * 2
+        if yHistory.count > maxHistory {
+            yHistory.removeFirst(yHistory.count - maxHistory)
+        }
 
-        lastYAcceleration = yAccel
+        // Detect sweep using Garmin algorithm
+        detectSweepGarmin()
     }
 
-    private func detectSweep(currentY: Double) {
-        // Simple threshold-based detection:
-        // A sweep is detected when acceleration crosses threshold and reverses direction
+    /// Garmin wave-pattern detection algorithm
+    /// Detects a complete oscillation: current direction → opposite direction → current direction
+    private func detectSweepGarmin() {
+        let currentIndex = yHistory.count - 1
+        guard currentIndex >= 0 else { return }
 
-        switch sweepPhase {
-        case .idle:
-            if currentY > sweepThreshold {
-                sweepPhase = .sweepingPositive
-            } else if currentY < -sweepThreshold {
-                sweepPhase = .sweepingNegative
-            }
+        let currentY = yHistory[currentIndex]
 
-        case .sweepingPositive:
-            if currentY < -sweepThreshold {
-                // Completed a sweep cycle (positive to negative)
-                countStroke()
-                sweepPhase = .sweepingNegative
-            } else if abs(currentY) < sweepThreshold * 0.3 {
-                // Returned to neutral without completing sweep
-                sweepPhase = .idle
-            }
+        // Only check if current acceleration exceeds threshold
+        guard abs(currentY) > sweepThresholdY else { return }
 
-        case .sweepingNegative:
-            if currentY > sweepThreshold {
-                // Completed a sweep cycle (negative to positive)
-                countStroke()
-                sweepPhase = .sweepingPositive
-            } else if abs(currentY) < sweepThreshold * 0.3 {
-                // Returned to neutral without completing sweep
-                sweepPhase = .idle
+        // Don't count if we recently counted a stroke at this position
+        guard currentIndex - lastStrokeSampleIndex >= sweepWavelength else { return }
+
+        let currentIsPositive = currentY > 0
+
+        // Look back through recent samples for the wave pattern
+        var directionChanged = false
+
+        for j in 1..<sweepWavelength {
+            let lookbackIndex = currentIndex - j
+            guard lookbackIndex >= 0 else { break }
+
+            let prevY = yHistory[lookbackIndex]
+
+            // Skip samples below threshold
+            guard abs(prevY) > sweepThresholdY else { continue }
+
+            let prevIsPositive = prevY > 0
+
+            if !directionChanged {
+                // Looking for first direction change (opposite sign from current)
+                if prevIsPositive != currentIsPositive {
+                    directionChanged = true
+                }
+            } else {
+                // Already found direction change, now looking for same direction as current
+                // This completes the wave: current → opposite → current
+                if prevIsPositive == currentIsPositive {
+                    countStroke()
+                    lastStrokeSampleIndex = currentIndex
+                    return
+                }
             }
         }
     }
@@ -340,7 +353,8 @@ final class WorkoutManager {
     private func resetStrokeCount() {
         strokeCountEnd = 0
         strokeCountTotal = 0
-        sweepPhase = .idle
+        yHistory.removeAll()
+        lastStrokeSampleIndex = -sweepWavelength
     }
 
     // MARK: - Timer
