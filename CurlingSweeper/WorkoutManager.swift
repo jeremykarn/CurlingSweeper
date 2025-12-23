@@ -104,7 +104,6 @@ final class WorkoutManager {
     private let motionManager = CMMotionManager()
     private var lastYAcceleration: Double = 0
     private var sweepPhase: SweepPhase = .idle
-    private var accelerationHistory: [Double] = []
 
     private enum SweepPhase {
         case idle
@@ -112,10 +111,9 @@ final class WorkoutManager {
         case sweepingNegative  // Moving in -Y direction
     }
 
-    // Sweep detection thresholds (from Garmin app, adjusted for CoreMotion)
-    // CoreMotion uses g units (1g = 9.8 m/s²), Garmin used milli-g
-    private let sweepThreshold: Double = 1.0  // 1g threshold for sweep detection
-    private let sweepHistorySize: Int = 10    // Samples to track
+    // Sweep detection thresholds (adjusted for sensitivity)
+    // CoreMotion uses g units (1g = 9.8 m/s²)
+    private let sweepThreshold: Double = 0.3  // 0.3g threshold for sweep detection
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
     private var stopwatchStartDate: Date?
@@ -287,19 +285,12 @@ final class WorkoutManager {
 
     private func stopMotionUpdates() {
         motionManager.stopAccelerometerUpdates()
-        accelerationHistory.removeAll()
         sweepPhase = .idle
         lastYAcceleration = 0
     }
 
     private func processAccelerometerData(_ data: CMAccelerometerData) {
         let yAccel = data.acceleration.y
-
-        // Add to history
-        accelerationHistory.append(yAccel)
-        if accelerationHistory.count > sweepHistorySize {
-            accelerationHistory.removeFirst()
-        }
 
         // Detect sweep based on threshold crossing and direction change
         detectSweep(currentY: yAccel)
@@ -324,7 +315,7 @@ final class WorkoutManager {
                 // Completed a sweep cycle (positive to negative)
                 countStroke()
                 sweepPhase = .sweepingNegative
-            } else if abs(currentY) < sweepThreshold * 0.5 {
+            } else if abs(currentY) < sweepThreshold * 0.3 {
                 // Returned to neutral without completing sweep
                 sweepPhase = .idle
             }
@@ -334,7 +325,7 @@ final class WorkoutManager {
                 // Completed a sweep cycle (negative to positive)
                 countStroke()
                 sweepPhase = .sweepingPositive
-            } else if abs(currentY) < sweepThreshold * 0.5 {
+            } else if abs(currentY) < sweepThreshold * 0.3 {
                 // Returned to neutral without completing sweep
                 sweepPhase = .idle
             }
@@ -349,7 +340,6 @@ final class WorkoutManager {
     private func resetStrokeCount() {
         strokeCountEnd = 0
         strokeCountTotal = 0
-        accelerationHistory.removeAll()
         sweepPhase = .idle
     }
 
