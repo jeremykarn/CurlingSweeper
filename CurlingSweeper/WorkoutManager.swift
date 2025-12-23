@@ -75,8 +75,13 @@ final class WorkoutManager {
     var isWorkoutActive = false
     var isPaused = false
     var heartRate: Double = 0
+    var averageHeartRate: Double = 0
     var activeCalories: Double = 0
     var elapsedTime: TimeInterval = 0
+
+    // Heart rate averaging
+    private var heartRateSum: Double = 0
+    private var heartRateCount: Int = 0
 
     // Stopwatch properties
     var isStopwatchRunning = false
@@ -241,6 +246,9 @@ final class WorkoutManager {
         isWorkoutActive = false
         isPaused = false
         heartRate = 0
+        averageHeartRate = 0
+        heartRateSum = 0
+        heartRateCount = 0
         activeCalories = 0
         elapsedTime = 0
         currentEnd = 0
@@ -548,6 +556,11 @@ final class WorkoutManager {
 
     fileprivate func handleHeartRateUpdate(_ value: Double) {
         heartRate = value
+
+        // Update average
+        heartRateSum += value
+        heartRateCount += 1
+        averageHeartRate = heartRateSum / Double(heartRateCount)
     }
 
     fileprivate func handleCaloriesUpdate(_ value: Double) {

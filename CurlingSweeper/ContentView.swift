@@ -12,7 +12,11 @@ struct ContentView: View {
 
     var body: some View {
         if workoutManager.isWorkoutActive {
-            WorkoutView()
+            if workoutManager.isPaused {
+                PausedSummaryView()
+            } else {
+                WorkoutView()
+            }
         } else {
             StartView()
         }
@@ -214,6 +218,82 @@ struct WorkoutView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+}
+
+// MARK: - Paused Summary View
+
+struct PausedSummaryView: View {
+    @Environment(WorkoutManager.self) var workoutManager
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Workout Paused")
+                .font(.headline)
+                .foregroundStyle(.yellow)
+
+            VStack(spacing: 12) {
+                // Elapsed Time
+                HStack {
+                    Image(systemName: "clock.fill")
+                        .foregroundStyle(.blue)
+                    Text("Elapsed")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(workoutManager.formattedElapsedTime())
+                        .font(.system(.body, design: .monospaced))
+                }
+
+                // Active Calories
+                HStack {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.orange)
+                    Text("Calories")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(Int(workoutManager.activeCalories)) kcal")
+                        .font(.system(.body, design: .monospaced))
+                }
+
+                // Total Strokes
+                HStack {
+                    Image(systemName: "figure.curling")
+                        .foregroundStyle(.cyan)
+                    Text("Strokes")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(workoutManager.strokeCountTotal)")
+                        .font(.system(.body, design: .monospaced))
+                }
+
+                // Average Heart Rate
+                HStack {
+                    Image(systemName: "heart.fill")
+                        .foregroundStyle(.red)
+                    Text("Avg HR")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(workoutManager.averageHeartRate > 0
+                         ? "\(Int(workoutManager.averageHeartRate)) BPM"
+                         : "-- BPM")
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+
+            Spacer()
+
+            // Resume button
+            Button {
+                workoutManager.resumeWorkout()
+            } label: {
+                Label("Resume", systemImage: "play.fill")
+                    .font(.title3)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+        }
+        .padding()
     }
 }
 
