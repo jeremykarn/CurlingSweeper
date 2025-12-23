@@ -383,9 +383,15 @@ final class WorkoutManager {
             // Stop the stopwatch, keep the time displayed
             isStopwatchRunning = false
             stopwatchStartDate = nil
-            // Show position picker to record where rock stopped
+            // Show position picker after delay (rock needs time to travel)
             if stopwatchTime > 0 {
-                showPositionPicker = true
+                Task {
+                    try? await Task.sleep(for: .seconds(10))
+                    // Only show picker if we haven't started a new timing
+                    if !isStopwatchRunning && !showPositionPicker {
+                        showPositionPicker = true
+                    }
+                }
             }
         } else {
             // Start fresh stopwatch
