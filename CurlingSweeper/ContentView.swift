@@ -89,50 +89,56 @@ struct WorkoutView: View {
                 workoutManager.toggleStopwatch()
             }
 
-            // Stats row
-            HStack(spacing: 10) {
-                // Current end
-                VStack(spacing: 2) {
-                    Text("\(workoutManager.currentEnd)")
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    Text("End")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                // Brush strokes
-                VStack(spacing: 2) {
-                    Text("\(workoutManager.strokeCountEnd)")
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.cyan)
-                    Text("Strokes")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                // Elapsed time
-                VStack(spacing: 2) {
-                    Text(workoutManager.formattedElapsedTime())
-                        .font(.system(size: 14, design: .monospaced))
-                    Text("Elapsed")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                // Heart rate
-                VStack(spacing: 2) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                        Text(workoutManager.heartRate > 0
-                             ? "\(Int(workoutManager.heartRate))"
-                             : "--")
-                            .font(.system(size: 14, design: .monospaced))
+            // Stats grid (2x2)
+            VStack(spacing: 8) {
+                // Row 1: End and Strokes
+                HStack(spacing: 32) {
+                    VStack(spacing: 2) {
+                        Text("\(workoutManager.currentEnd)")
+                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        Text("End")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    Text("BPM")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 2) {
+                        Text("\(workoutManager.strokeCountEnd)")
+                            .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.cyan)
+                        Text("Strokes")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+
+                // Row 2: Elapsed and Heart Rate
+                HStack(spacing: 32) {
+                    VStack(spacing: 2) {
+                        Text(workoutManager.formattedElapsedTime())
+                            .font(.system(size: 16, design: .monospaced))
+                        Text("Elapsed")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 2) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "heart.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                            Text(workoutManager.heartRate > 0
+                                 ? "\(Int(workoutManager.heartRate))"
+                                 : "--")
+                                .font(.system(size: 16, design: .monospaced))
+                        }
+                        Text("BPM")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
 
