@@ -98,6 +98,12 @@ final class WorkoutManager {
     var strokeCountEnd: Int = 0      // Strokes in current end
     var strokeCountTotal: Int = 0    // Total strokes in workout
 
+    // Debug mode for accelerometer recording
+    var isDebugMode = false
+    var debugSampleCount: Int = 0
+    private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
+    private var debugStartTime: Date?
+
     // MARK: - Private Properties
 
     private let healthStore = HKHealthStore()
@@ -293,7 +299,19 @@ final class WorkoutManager {
     }
 
     private func processAccelerometerData(_ data: CMAccelerometerData) {
+        let xAccel = data.acceleration.x
         let yAccel = data.acceleration.y
+        let zAccel = data.acceleration.z
+
+        // Record debug data if enabled
+        if isDebugMode {
+            if debugStartTime == nil {
+                debugStartTime = Date()
+            }
+            let timestamp = Date().timeIntervalSince(debugStartTime!)
+            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
+            debugSampleCount = debugData.count
+        }
 
         // Add to history (keep last sweepWavelength * 2 samples for lookback)
         yHistory.append(yAccel)
@@ -349,6 +367,30 @@ final class WorkoutManager {
         lastStrokeSampleIndex = -sweepWavelength
     }
 
+    // MARK: - Debug Data
+
+    /// Returns debug data as CSV string
+    func getDebugCSV() -> String {
+        var csv = "timestamp,x,y,z\n"
+        for sample in debugData {
+            csv += String(format: "%.4f,%.6f,%.6f,%.6f\n",
+                          sample.timestamp, sample.x, sample.y, sample.z)
+        }
+        return csv
+    }
+
+    /// Clears all recorded debug data
+    func clearDebugData() {
+        debugData.removeAll()
+        debugSampleCount = 0
+        debugStartTime = nil
+    }
+
+    /// Returns true if there is debug data to send
+    var hasDebugData: Bool {
+        !debugData.isEmpty
+    }
+
     // MARK: - Timer
 
     private func startTimer() {
@@ -399,6 +441,11 @@ final class WorkoutManager {
             isStopwatchRunning = true
             currentEstimate = nil
             showPositionPicker = false
+
+            // Start debug recording for this shot
+            if isDebugMode {
+                clearDebugData()
+            }
         }
     }
 
@@ -466,9 +513,15 @@ final class WorkoutManager {
         // Recalculate split times based on recorded data
         recalculateSplitTimes()
 
+        // Store the position in debug data filename for reference
+        lastRecordedPosition = position
+
         // Hide picker and reset for next timing
         showPositionPicker = false
     }
+
+    // Last recorded position for debug filename
+    var lastRecordedPosition: RockPosition?
 
     /// Recalculates split times based on recorded observations
     private func recalculateSplitTimes() {

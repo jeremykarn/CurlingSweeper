@@ -225,75 +225,124 @@ struct WorkoutView: View {
 
 struct PausedSummaryView: View {
     @Environment(WorkoutManager.self) var workoutManager
+    @Environment(WatchConnectivityManager.self) var connectivityManager
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Workout Paused")
-                .font(.headline)
-                .foregroundStyle(.yellow)
+        @Bindable var manager = workoutManager
 
+        ScrollView {
             VStack(spacing: 12) {
-                // Elapsed Time
-                HStack {
-                    Image(systemName: "clock.fill")
-                        .foregroundStyle(.blue)
-                    Text("Elapsed")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(workoutManager.formattedElapsedTime())
-                        .font(.system(.body, design: .monospaced))
+                Text("Workout Paused")
+                    .font(.headline)
+                    .foregroundStyle(.yellow)
+
+                VStack(spacing: 8) {
+                    // Elapsed Time
+                    HStack {
+                        Image(systemName: "clock.fill")
+                            .foregroundStyle(.blue)
+                        Text("Elapsed")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(workoutManager.formattedElapsedTime())
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
+                    // Active Calories
+                    HStack {
+                        Image(systemName: "flame.fill")
+                            .foregroundStyle(.orange)
+                        Text("Calories")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(workoutManager.activeCalories)) kcal")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
+                    // Total Strokes
+                    HStack {
+                        Image(systemName: "figure.curling")
+                            .foregroundStyle(.cyan)
+                        Text("Strokes")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(workoutManager.strokeCountTotal)")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
+                    // Average Heart Rate
+                    HStack {
+                        Image(systemName: "heart.fill")
+                            .foregroundStyle(.red)
+                        Text("Avg HR")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(workoutManager.averageHeartRate > 0
+                             ? "\(Int(workoutManager.averageHeartRate)) BPM"
+                             : "-- BPM")
+                            .font(.system(.caption, design: .monospaced))
+                    }
                 }
 
-                // Active Calories
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(.orange)
-                    Text("Calories")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(Int(workoutManager.activeCalories)) kcal")
-                        .font(.system(.body, design: .monospaced))
+                Divider()
+
+                // Debug section
+                VStack(spacing: 8) {
+                    Toggle("Record Shots", isOn: $manager.isDebugMode)
+                        .font(.caption)
+
+                    if workoutManager.hasDebugData {
+                        HStack {
+                            if let pos = workoutManager.lastRecordedPosition {
+                                Text("Last: \(pos.label)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("\(workoutManager.debugSampleCount) samples")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button {
+                            let csv = workoutManager.getDebugCSV()
+                            let pos = workoutManager.lastRecordedPosition?.label ?? "unknown"
+                            let time = workoutManager.formattedStopwatchTime().replacingOccurrences(of: ".", with: "-")
+                            let fileName = "shot_\(time)_\(pos).csv"
+                            connectivityManager.sendDebugData(csv, fileName: fileName)
+                        } label: {
+                            Label("Send to iPhone", systemImage: "iphone.and.arrow.forward")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.purple)
+                        .disabled(!connectivityManager.isPhoneReachable)
+
+                        if let status = connectivityManager.lastSendStatus {
+                            Text(status)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if workoutManager.isDebugMode {
+                        Text("Data recorded during shots")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
-                // Total Strokes
-                HStack {
-                    Image(systemName: "figure.curling")
-                        .foregroundStyle(.cyan)
-                    Text("Strokes")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(workoutManager.strokeCountTotal)")
-                        .font(.system(.body, design: .monospaced))
+                // Resume button
+                Button {
+                    workoutManager.resumeWorkout()
+                } label: {
+                    Label("Resume", systemImage: "play.fill")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
                 }
-
-                // Average Heart Rate
-                HStack {
-                    Image(systemName: "heart.fill")
-                        .foregroundStyle(.red)
-                    Text("Avg HR")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(workoutManager.averageHeartRate > 0
-                         ? "\(Int(workoutManager.averageHeartRate)) BPM"
-                         : "-- BPM")
-                        .font(.system(.body, design: .monospaced))
-                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
             }
-
-            Spacer()
-
-            // Resume button
-            Button {
-                workoutManager.resumeWorkout()
-            } label: {
-                Label("Resume", systemImage: "play.fill")
-                    .font(.title3)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .padding()
         }
-        .padding()
     }
 }
 

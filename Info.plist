@@ -27,6 +27,6 @@
 	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.example.apple-jk</string>
+	<string>com.example.apple-jk.CurlingSweeper-iOS</string>
 </dict>
 </plist>
