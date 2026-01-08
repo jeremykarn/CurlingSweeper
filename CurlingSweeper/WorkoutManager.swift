@@ -571,7 +571,7 @@ final class WorkoutManager {
     func formattedStopwatchTime() -> String {
         let seconds = Int(stopwatchTime)
         let hundredths = Int((stopwatchTime.truncatingRemainder(dividingBy: 1)) * 100)
-        return String(format: "%02d.%02d", seconds, hundredths)
+        return String(format: "%d.%02d", seconds, hundredths)
     }
 
     // MARK: - Delegate Callbacks
