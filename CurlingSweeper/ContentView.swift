@@ -68,8 +68,6 @@ struct WorkoutView: View {
     @State private var showingShotTimer = false
 
     var body: some View {
-        @Bindable var manager = workoutManager
-
         VStack(spacing: 8) {
             // Ready for Shot button
             Button {
@@ -195,9 +193,6 @@ struct WorkoutView: View {
         .fullScreenCover(isPresented: $showingShotTimer) {
             ShotTimerView(isPresented: $showingShotTimer)
         }
-        .sheet(isPresented: $manager.showPositionPicker) {
-            PositionPickerView()
-        }
         .confirmationDialog("End Workout?", isPresented: $showingEndConfirmation) {
             Button("Save") {
                 Task {
@@ -219,6 +214,7 @@ struct WorkoutView: View {
 struct ShotTimerView: View {
     @Environment(WorkoutManager.self) var workoutManager
     @Binding var isPresented: Bool
+    @State private var showingPositionPicker = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -259,16 +255,8 @@ struct ShotTimerView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if workoutManager.isStopwatchRunning {
-                // Stop the timer
+                // Stop the timer - will show position picker after 10s
                 workoutManager.toggleStopwatch()
-                // Wait 10 seconds then show position picker and dismiss
-                Task {
-                    try? await Task.sleep(for: .seconds(10))
-                    if !workoutManager.isStopwatchRunning {
-                        isPresented = false
-                        // Position picker will be shown by WorkoutManager
-                    }
-                }
             } else if workoutManager.stopwatchTime == 0 {
                 // Start the timer
                 workoutManager.toggleStopwatch()
@@ -277,8 +265,15 @@ struct ShotTimerView: View {
         .background(Color.black)
         .onChange(of: workoutManager.showPositionPicker) { _, showing in
             if showing {
-                isPresented = false
+                showingPositionPicker = true
             }
+        }
+        .sheet(isPresented: $showingPositionPicker, onDismiss: {
+            // Dismiss shot timer after position picker closes
+            workoutManager.showPositionPicker = false
+            isPresented = false
+        }) {
+            PositionPickerView()
         }
     }
 }
