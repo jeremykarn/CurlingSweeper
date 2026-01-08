@@ -288,7 +288,7 @@ struct PausedSummaryView: View {
 
                 // Debug section
                 VStack(spacing: 8) {
-                    Toggle("Record Shots", isOn: $manager.isDebugMode)
+                    Toggle("Debug Log", isOn: $manager.isDebugMode)
                         .font(.caption)
 
                     if workoutManager.hasDebugData {
@@ -324,7 +324,7 @@ struct PausedSummaryView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if workoutManager.isDebugMode {
-                        Text("Data recorded during shots")
+                        Text("Recording during timed shots")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
