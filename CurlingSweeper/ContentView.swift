@@ -65,33 +65,23 @@ struct StartView: View {
 struct WorkoutView: View {
     @Environment(WorkoutManager.self) var workoutManager
     @State private var showingEndConfirmation = false
+    @State private var showingShotTimer = false
 
     var body: some View {
         @Bindable var manager = workoutManager
 
         VStack(spacing: 8) {
-            // Stopwatch (main feature - tap to start/stop)
-            VStack(spacing: 4) {
-                Text(workoutManager.formattedStopwatchTime())
-                    .font(.system(size: 44, weight: .bold, design: .monospaced))
-                    .foregroundStyle(workoutManager.isStopwatchRunning ? .green : .primary)
-
-                // Show estimate while running or after stopped
-                if let estimate = workoutManager.currentEstimate {
-                    Text(estimate.label)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.orange)
-                } else {
-                    Text(workoutManager.isStopwatchRunning ? "Timing..." : "Tap to time")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            // Ready for Shot button
+            Button {
+                showingShotTimer = true
+            } label: {
+                Text("Ready for Shot")
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
             }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                workoutManager.toggleStopwatch()
-            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
 
             // Stats grid
             VStack(spacing: 8) {
@@ -202,6 +192,9 @@ struct WorkoutView: View {
             }
         }
         .padding()
+        .fullScreenCover(isPresented: $showingShotTimer) {
+            ShotTimerView(isPresented: $showingShotTimer)
+        }
         .sheet(isPresented: $manager.showPositionPicker) {
             PositionPickerView()
         }
@@ -217,6 +210,75 @@ struct WorkoutView: View {
                 }
             }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+}
+
+// MARK: - Shot Timer View
+
+struct ShotTimerView: View {
+    @Environment(WorkoutManager.self) var workoutManager
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            // Timer display
+            Text(workoutManager.formattedStopwatchTime())
+                .font(.system(size: 48, weight: .bold, design: .monospaced))
+                .foregroundStyle(workoutManager.isStopwatchRunning ? .green : .primary)
+
+            // Estimate or instruction
+            if let estimate = workoutManager.currentEstimate {
+                Text(estimate.label)
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(.orange)
+            } else if workoutManager.stopwatchTime > 0 {
+                Text("Stopped")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Tap to Start")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // Cancel button (only before starting)
+            if !workoutManager.isStopwatchRunning && workoutManager.stopwatchTime == 0 {
+                Button("Cancel") {
+                    isPresented = false
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if workoutManager.isStopwatchRunning {
+                // Stop the timer
+                workoutManager.toggleStopwatch()
+                // Wait 10 seconds then show position picker and dismiss
+                Task {
+                    try? await Task.sleep(for: .seconds(10))
+                    if !workoutManager.isStopwatchRunning {
+                        isPresented = false
+                        // Position picker will be shown by WorkoutManager
+                    }
+                }
+            } else if workoutManager.stopwatchTime == 0 {
+                // Start the timer
+                workoutManager.toggleStopwatch()
+            }
+        }
+        .background(Color.black)
+        .onChange(of: workoutManager.showPositionPicker) { _, showing in
+            if showing {
+                isPresented = false
+            }
         }
     }
 }
