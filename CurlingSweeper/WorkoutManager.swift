@@ -108,12 +108,12 @@ final class WorkoutManager {
     // Motion detection - Garmin algorithm
     private let motionManager = CMMotionManager()
 
-    // Sweep detection thresholds (matching Garmin algorithm)
-    // Garmin uses milli-g (1000 = 1g), CoreMotion uses g units
-    private let sweepThresholdY: Double = 1.0  // 1g threshold (same as Garmin's 1000 milli-g)
-    private let sweepWavelength: Int = 10      // Look back up to 10 samples for wave pattern
+    // Sweep detection thresholds
+    // Lowered from Garmin's 1g - Apple Watch accelerometer may differ
+    private let sweepThresholdY: Double = 0.3  // 0.3g threshold for sweep detection
+    private let sweepWavelength: Int = 15      // Look back up to 15 samples for wave pattern (at 25Hz = 0.6 sec)
     private var yHistory: [Double] = []        // Recent Y acceleration samples
-    private var lastStrokeSampleIndex: Int = -10  // Samples since last counted stroke
+    private var lastStrokeSampleIndex: Int = -15  // Samples since last counted stroke
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
     private var stopwatchStartDate: Date?
@@ -306,8 +306,7 @@ final class WorkoutManager {
         detectSweepGarmin()
     }
 
-    /// Garmin wave-pattern detection algorithm
-    /// Detects a complete oscillation: current direction → opposite direction → current direction
+    /// Simplified stroke detection - counts when acceleration crosses threshold and reverses
     private func detectSweepGarmin() {
         let currentIndex = yHistory.count - 1
         guard currentIndex >= 0 else { return }
@@ -317,38 +316,23 @@ final class WorkoutManager {
         // Only check if current acceleration exceeds threshold
         guard abs(currentY) > sweepThresholdY else { return }
 
-        // Don't count if we recently counted a stroke at this position
-        guard currentIndex - lastStrokeSampleIndex >= sweepWavelength else { return }
+        // Don't count if we recently counted a stroke
+        guard currentIndex - lastStrokeSampleIndex >= 5 else { return }  // At least 5 samples (0.2 sec) between strokes
 
         let currentIsPositive = currentY > 0
 
-        // Look back through recent samples for the wave pattern
-        var directionChanged = false
-
+        // Look back to find if we had opposite direction recently (simpler than full wave)
         for j in 1..<sweepWavelength {
             let lookbackIndex = currentIndex - j
             guard lookbackIndex >= 0 else { break }
 
             let prevY = yHistory[lookbackIndex]
 
-            // Skip samples below threshold
-            guard abs(prevY) > sweepThresholdY else { continue }
-
-            let prevIsPositive = prevY > 0
-
-            if !directionChanged {
-                // Looking for first direction change (opposite sign from current)
-                if prevIsPositive != currentIsPositive {
-                    directionChanged = true
-                }
-            } else {
-                // Already found direction change, now looking for same direction as current
-                // This completes the wave: current → opposite → current
-                if prevIsPositive == currentIsPositive {
-                    countStroke()
-                    lastStrokeSampleIndex = currentIndex
-                    return
-                }
+            // Found a sample above threshold in opposite direction = one stroke
+            if abs(prevY) > sweepThresholdY && (prevY > 0) != currentIsPositive {
+                countStroke()
+                lastStrokeSampleIndex = currentIndex
+                return
             }
         }
     }
