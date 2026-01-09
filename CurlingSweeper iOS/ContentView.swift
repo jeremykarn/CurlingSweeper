@@ -99,10 +99,32 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        let lineCount = csvData.components(separatedBy: "\n").count - 1
+                        let lines = csvData.components(separatedBy: "\n")
+                        let lineCount = lines.count - 1
                         Text("\(lineCount) samples")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+
+                        // Last 10 lines preview
+                        let dataLines = lines.dropFirst() // Skip header
+                        let last10 = dataLines.suffix(10)
+                        if !last10.isEmpty {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Last 10 samples:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                ForEach(Array(last10.enumerated()), id: \.offset) { _, line in
+                                    if !line.isEmpty {
+                                        Text(line)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        }
 
                         // Share button
                         if let url = connectivityManager.getReceivedDataURL() {

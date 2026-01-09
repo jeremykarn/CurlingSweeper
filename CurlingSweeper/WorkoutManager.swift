@@ -103,8 +103,8 @@ final class WorkoutManager {
     var debugSampleCount: Int = 0
     var currentShotIndex: Int = 0
     private var nextShotIndex: Int = 0
-    private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
-    private var debugStartTime: Date?
+    private var debugData: [(shot: Int, timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
+    private var shotStartTime: Date?
 
     // Callback for syncing status to phone
     var onStatusUpdate: ((Bool, TimeInterval, Double, Double, Int, Int) -> Void)?
@@ -213,6 +213,7 @@ final class WorkoutManager {
             currentEnd = 1
             startTimer()
             startMotionUpdates()
+            clearDebugData()  // Fresh debug data for new workout
 
         } catch {
             print("Failed to start workout: \(error.localizedDescription)")
@@ -314,13 +315,14 @@ final class WorkoutManager {
         let yAccel = data.acceleration.y
         let zAccel = data.acceleration.z
 
-        // Record debug data if enabled
-        if isDebugMode {
-            if debugStartTime == nil {
-                debugStartTime = Date()
+        // Record debug data if enabled and timing a shot (including waiting for feedback)
+        let isRecordingShot = isStopwatchRunning || (stopwatchTime > 0 && shotStartTime != nil)
+        if isDebugMode && isRecordingShot {
+            if shotStartTime == nil {
+                shotStartTime = Date()
             }
-            let timestamp = Date().timeIntervalSince(debugStartTime!)
-            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
+            let timestamp = Date().timeIntervalSince(shotStartTime!)
+            debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
             debugSampleCount = debugData.count
         }
 
@@ -382,10 +384,10 @@ final class WorkoutManager {
 
     /// Returns debug data as CSV string
     func getDebugCSV() -> String {
-        var csv = "timestamp,x,y,z\n"
+        var csv = "shot,timestamp,x,y,z\n"
         for sample in debugData {
-            csv += String(format: "%.4f,%.6f,%.6f,%.6f\n",
-                          sample.timestamp, sample.x, sample.y, sample.z)
+            csv += String(format: "%d,%.4f,%.6f,%.6f,%.6f\n",
+                          sample.shot, sample.timestamp, sample.x, sample.y, sample.z)
         }
         return csv
     }
@@ -394,7 +396,7 @@ final class WorkoutManager {
     func clearDebugData() {
         debugData.removeAll()
         debugSampleCount = 0
-        debugStartTime = nil
+        shotStartTime = nil
     }
 
     /// Returns true if there is debug data to send
@@ -459,11 +461,9 @@ final class WorkoutManager {
             currentEstimate = nil
             showPositionPicker = false
 
-            // Capture shot index and start debug recording
+            // Capture shot index and reset shot timer for debug recording
             currentShotIndex = nextShotIndex
-            if isDebugMode {
-                clearDebugData()
-            }
+            shotStartTime = nil  // Reset per-shot timestamp
         }
     }
 
@@ -504,8 +504,9 @@ final class WorkoutManager {
         let index = position.rawValue
         let time = stopwatchTime
 
-        // Increment shot index for next shot
+        // Increment shot index for next shot and stop debug recording
         nextShotIndex += 1
+        shotStartTime = nil  // Stop recording for this shot
 
         // Record this time for the position
         // For HOG: only record if faster than existing (rock was going faster than expected)
