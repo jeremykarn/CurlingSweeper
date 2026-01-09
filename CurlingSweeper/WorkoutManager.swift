@@ -104,6 +104,10 @@ final class WorkoutManager {
     private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
     private var debugStartTime: Date?
 
+    // Callback for syncing status to phone
+    var onStatusUpdate: ((Bool, TimeInterval, Double, Double, Int, Int) -> Void)?
+    private var lastSyncTime: Date?
+
     // MARK: - Private Properties
 
     private let healthStore = HKHealthStore()
@@ -265,6 +269,9 @@ final class WorkoutManager {
         builder = nil
         startDate = nil
         delegateHandler = nil
+
+        // Sync final status to phone
+        onStatusUpdate?(false, 0, 0, 0, 0, 0)
     }
 
     // MARK: - End Tracking
@@ -414,6 +421,12 @@ final class WorkoutManager {
         if isStopwatchRunning, let stopwatchStart = stopwatchStartDate {
             stopwatchTime = Date().timeIntervalSince(stopwatchStart)
             updateEstimate()
+        }
+
+        // Sync status to phone every second
+        if lastSyncTime == nil || Date().timeIntervalSince(lastSyncTime!) >= 1.0 {
+            lastSyncTime = Date()
+            onStatusUpdate?(isWorkoutActive, elapsedTime, activeCalories, heartRate, strokeCountTotal, currentEnd)
         }
     }
 

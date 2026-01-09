@@ -377,7 +377,6 @@ struct PausedSummaryView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(.purple)
-                        .disabled(!connectivityManager.isPhoneReachable)
 
                         if let status = connectivityManager.lastSendStatus {
                             Text(status)

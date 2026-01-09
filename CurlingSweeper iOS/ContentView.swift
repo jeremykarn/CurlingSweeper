@@ -13,17 +13,73 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                // Watch connection status
-                HStack {
-                    Image(systemName: connectivityManager.isWatchReachable ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
-                        .font(.title)
-                        .foregroundStyle(connectivityManager.isWatchReachable ? .green : .secondary)
+                // Workout status
+                if connectivityManager.isWorkoutActive {
+                    VStack(spacing: 16) {
+                        HStack {
+                            Image(systemName: "figure.curling")
+                                .font(.title)
+                                .foregroundStyle(.green)
+                            Text("Workout Active")
+                                .font(.headline)
+                                .foregroundStyle(.green)
+                        }
 
-                    Text(connectivityManager.isWatchReachable ? "Watch Connected" : "Watch Not Reachable")
-                        .foregroundStyle(connectivityManager.isWatchReachable ? .primary : .secondary)
+                        // Elapsed time
+                        Text(connectivityManager.formattedElapsedTime())
+                            .font(.system(size: 64, weight: .bold, design: .monospaced))
+
+                        // Stats row
+                        HStack(spacing: 32) {
+                            VStack {
+                                Text("\(connectivityManager.currentEnd)")
+                                    .font(.title2.bold())
+                                Text("End")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            VStack {
+                                Text("\(Int(connectivityManager.calories))")
+                                    .font(.title2.bold())
+                                Text("kcal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            VStack {
+                                Text("\(connectivityManager.strokeCount)")
+                                    .font(.title2.bold())
+                                Text("Strokes")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            VStack {
+                                Text(connectivityManager.heartRate > 0 ? "\(Int(connectivityManager.heartRate))" : "--")
+                                    .font(.title2.bold())
+                                Text("BPM")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                } else {
+                    // Watch connection status
+                    HStack {
+                        Image(systemName: connectivityManager.isWatchReachable ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
+                            .font(.title)
+                            .foregroundStyle(connectivityManager.isWatchReachable ? .green : .secondary)
+
+                        Text(connectivityManager.isWatchReachable ? "Watch Connected" : "Watch Not Reachable")
+                            .foregroundStyle(connectivityManager.isWatchReachable ? .primary : .secondary)
+                    }
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .padding()
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
 
                 Spacer()
 

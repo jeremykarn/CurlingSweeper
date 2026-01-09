@@ -25,28 +25,48 @@ final class WatchConnectivityManager: NSObject {
             session = WCSession.default
             session?.delegate = self
             session?.activate()
+            print("WCSession activating...")
+        } else {
+            print("WCSession not supported")
         }
     }
 
-    /// Send CSV data to iPhone
+    /// Send CSV data to iPhone - uses transferUserInfo for reliable background delivery
     func sendDebugData(_ csvData: String, fileName: String) {
-        guard let session = session, session.isReachable else {
-            lastSendStatus = "iPhone not reachable"
+        guard let session = session else {
+            lastSendStatus = "No session"
             return
         }
 
-        let message: [String: Any] = [
+        let userInfo: [String: Any] = [
             "debugCSV": csvData,
             "fileName": fileName
         ]
 
-        session.sendMessage(message, replyHandler: nil) { [weak self] error in
-            Task { @MainActor in
-                self?.lastSendStatus = "Failed: \(error.localizedDescription)"
-            }
-        }
+        // Use transferUserInfo - queued for delivery even if not reachable
+        session.transferUserInfo(userInfo)
+        lastSendStatus = "Queued \(csvData.count) bytes"
+    }
 
-        lastSendStatus = "Sent \(csvData.count) bytes"
+    /// Sync workout status to iPhone
+    func syncWorkoutStatus(isActive: Bool, elapsedTime: TimeInterval, calories: Double, heartRate: Double, strokeCount: Int, currentEnd: Int) {
+        guard let session = session else { return }
+
+        let context: [String: Any] = [
+            "isWorkoutActive": isActive,
+            "elapsedTime": elapsedTime,
+            "calories": calories,
+            "heartRate": heartRate,
+            "strokeCount": strokeCount,
+            "currentEnd": currentEnd,
+            "lastUpdate": Date().timeIntervalSince1970
+        ]
+
+        do {
+            try session.updateApplicationContext(context)
+        } catch {
+            print("Failed to update application context: \(error)")
+        }
     }
 }
 
@@ -55,16 +75,21 @@ final class WatchConnectivityManager: NSObject {
 extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        let reachable = session.isReachable
+
+        print("WCSession activated: state=\(activationState.rawValue), reachable=\(reachable)")
+
         Task { @MainActor in
-            self.isPhoneReachable = session.isReachable
+            self.isPhoneReachable = reachable
         }
 
         if let error = error {
-            print("WCSession activation failed: \(error.localizedDescription)")
+            print("WCSession activation error: \(error.localizedDescription)")
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        print("WCSession reachability changed: \(session.isReachable)")
         Task { @MainActor in
             self.isPhoneReachable = session.isReachable
         }

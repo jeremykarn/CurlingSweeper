@@ -17,6 +17,19 @@ struct CurlingSweeperApp: App {
             ContentView()
                 .environment(workoutManager)
                 .environment(connectivityManager)
+                .onAppear {
+                    // Wire up status sync to phone
+                    workoutManager.onStatusUpdate = { isActive, elapsed, calories, heartRate, strokes, end in
+                        connectivityManager.syncWorkoutStatus(
+                            isActive: isActive,
+                            elapsedTime: elapsed,
+                            calories: calories,
+                            heartRate: heartRate,
+                            strokeCount: strokes,
+                            currentEnd: end
+                        )
+                    }
+                }
         }
     }
 }

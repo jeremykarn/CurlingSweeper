@@ -18,6 +18,15 @@ final class PhoneConnectivityManager: NSObject {
     var lastReceivedDate: Date?
     var receivedFileName: String?
 
+    // Workout status from watch
+    var isWorkoutActive = false
+    var elapsedTime: TimeInterval = 0
+    var calories: Double = 0
+    var heartRate: Double = 0
+    var strokeCount: Int = 0
+    var currentEnd: Int = 0
+    var lastStatusUpdate: Date?
+
     private var session: WCSession?
 
     override init() {
@@ -28,6 +37,12 @@ final class PhoneConnectivityManager: NSObject {
             session?.delegate = self
             session?.activate()
         }
+    }
+
+    func formattedElapsedTime() -> String {
+        let minutes = Int(elapsedTime) / 60
+        let seconds = Int(elapsedTime) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     func getReceivedDataURL() -> URL? {
@@ -91,8 +106,46 @@ extension PhoneConnectivityManager: WCSessionDelegate {
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
                 self.receivedFileName = message["fileName"] as? String
-                print("Received debug CSV data: \(csvData.count) characters")
+                print("Received debug CSV message: \(csvData.count) characters")
             }
+        }
+    }
+
+    // Receive transferUserInfo data
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        Task { @MainActor in
+            if let csvData = userInfo["debugCSV"] as? String {
+                self.lastReceivedData = csvData
+                self.lastReceivedDate = Date()
+                self.receivedFileName = userInfo["fileName"] as? String
+                print("Received debug CSV userInfo: \(csvData.count) characters")
+            }
+        }
+    }
+
+    // Receive application context (workout status)
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        Task { @MainActor in
+            if let isActive = applicationContext["isWorkoutActive"] as? Bool {
+                self.isWorkoutActive = isActive
+            }
+            if let elapsed = applicationContext["elapsedTime"] as? TimeInterval {
+                self.elapsedTime = elapsed
+            }
+            if let cal = applicationContext["calories"] as? Double {
+                self.calories = cal
+            }
+            if let hr = applicationContext["heartRate"] as? Double {
+                self.heartRate = hr
+            }
+            if let strokes = applicationContext["strokeCount"] as? Int {
+                self.strokeCount = strokes
+            }
+            if let end = applicationContext["currentEnd"] as? Int {
+                self.currentEnd = end
+            }
+            self.lastStatusUpdate = Date()
+            print("Received workout status: elapsed=\(self.elapsedTime), active=\(self.isWorkoutActive)")
         }
     }
 
