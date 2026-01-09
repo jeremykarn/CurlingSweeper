@@ -367,9 +367,7 @@ struct PausedSummaryView: View {
 
                         Button {
                             let csv = workoutManager.getDebugCSV()
-                            let pos = workoutManager.lastRecordedPosition?.label ?? "unknown"
-                            let time = workoutManager.formattedStopwatchTime().replacingOccurrences(of: ".", with: "-")
-                            let fileName = "shot_\(time)_\(pos).csv"
+                            let fileName = "shot_\(workoutManager.currentShotIndex).csv"
                             connectivityManager.sendDebugData(csv, fileName: fileName)
                         } label: {
                             Label("Send to iPhone", systemImage: "iphone.and.arrow.forward")

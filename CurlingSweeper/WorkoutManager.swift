@@ -101,6 +101,8 @@ final class WorkoutManager {
     // Debug mode for accelerometer recording
     var isDebugMode = false
     var debugSampleCount: Int = 0
+    var currentShotIndex: Int = 0
+    private var nextShotIndex: Int = 0
     private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
     private var debugStartTime: Date?
 
@@ -262,6 +264,8 @@ final class WorkoutManager {
         activeCalories = 0
         elapsedTime = 0
         currentEnd = 0
+        currentShotIndex = 0
+        nextShotIndex = 0
         resetStopwatch()
         stopMotionUpdates()
         resetStrokeCount()
@@ -455,7 +459,8 @@ final class WorkoutManager {
             currentEstimate = nil
             showPositionPicker = false
 
-            // Start debug recording for this shot
+            // Capture shot index and start debug recording
+            currentShotIndex = nextShotIndex
             if isDebugMode {
                 clearDebugData()
             }
@@ -498,6 +503,9 @@ final class WorkoutManager {
 
         let index = position.rawValue
         let time = stopwatchTime
+
+        // Increment shot index for next shot
+        nextShotIndex += 1
 
         // Record this time for the position
         // For HOG: only record if faster than existing (rock was going faster than expected)
