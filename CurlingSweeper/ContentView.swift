@@ -263,6 +263,10 @@ struct ShotTimerView: View {
             }
         }
         .background(Color.black)
+        .onAppear {
+            // Reset stopwatch each time the timer view opens
+            workoutManager.resetStopwatch()
+        }
         .onChange(of: workoutManager.showPositionPicker) { _, showing in
             if showing {
                 showingPositionPicker = true
