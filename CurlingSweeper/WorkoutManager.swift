@@ -124,11 +124,11 @@ final class WorkoutManager {
     private let motionManager = CMMotionManager()
 
     // Sweep detection thresholds
-    // Lowered from Garmin's 1g - Apple Watch accelerometer may differ
-    private let sweepThresholdY: Double = 0.3  // 0.3g threshold for sweep detection
-    private let sweepWavelength: Int = 15      // Look back up to 15 samples for wave pattern (at 25Hz = 0.6 sec)
-    private var yHistory: [Double] = []        // Recent Y acceleration samples
-    private var lastStrokeSampleIndex: Int = -15  // Samples since last counted stroke
+    private let sweepThresholdY: Double = 1.0  // Minimum Y amplitude to count as valid sweep motion
+    private var lastYSign: Int = 0             // -1 for negative, 0 for neutral, 1 for positive
+    private var peakYInPhase: Double = 0       // Track peak |Y| in current phase
+    private var lastStrokeTime: Date?          // Time of last stroke for debouncing
+    private let minStrokeInterval: TimeInterval = 0.08  // Minimum 80ms between strokes
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
     private var stopwatchStartDate: Date?
@@ -300,7 +300,7 @@ final class WorkoutManager {
             return
         }
 
-        motionManager.accelerometerUpdateInterval = 1.0 / 25.0  // 25Hz like Garmin app
+        motionManager.accelerometerUpdateInterval = 1.0 / 60.0  // 60Hz for better stroke detection
         motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, error in
             guard let self = self, let data = data else { return }
             Task { @MainActor in
@@ -311,8 +311,13 @@ final class WorkoutManager {
 
     private func stopMotionUpdates() {
         motionManager.stopAccelerometerUpdates()
-        yHistory.removeAll()
-        lastStrokeSampleIndex = -sweepWavelength
+        resetSweepDetection()
+    }
+
+    private func resetSweepDetection() {
+        lastYSign = 0
+        peakYInPhase = 0
+        lastStrokeTime = nil
     }
 
     private func processAccelerometerData(_ data: CMAccelerometerData) {
@@ -324,52 +329,53 @@ final class WorkoutManager {
         let isActiveShot = !isStopwatchRunning && stopwatchTime > 0 && shotStartTime != nil
         guard isActiveShot else { return }
 
+        // Detect sweep motion
+        detectSweep(yAccel)
+
         // Record debug data if enabled
         if isDebugMode {
             let timestamp = Date().timeIntervalSince(shotStartTime!)
             debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
             debugSampleCount = debugData.count
         }
-
-        // Add to history (keep last sweepWavelength * 2 samples for lookback)
-        yHistory.append(yAccel)
-        let maxHistory = sweepWavelength * 2
-        if yHistory.count > maxHistory {
-            yHistory.removeFirst(yHistory.count - maxHistory)
-        }
-
-        // Detect sweep using Garmin algorithm
-        detectSweepGarmin()
     }
 
-    /// Simplified stroke detection - counts when acceleration crosses threshold and reverses
-    private func detectSweepGarmin() {
-        let currentIndex = yHistory.count - 1
-        guard currentIndex >= 0 else { return }
+    /// Stroke detection based on Y-axis zero-crossings with amplitude threshold
+    /// Counts a stroke when Y changes sign and the previous phase exceeded the amplitude threshold
+    private func detectSweep(_ yAccel: Double) {
+        // Determine current sign: -1 for negative, 1 for positive, 0 for near-zero
+        let currentSign: Int
+        if yAccel > 0.05 {
+            currentSign = 1
+        } else if yAccel < -0.05 {
+            currentSign = -1
+        } else {
+            currentSign = 0
+        }
 
-        let currentY = yHistory[currentIndex]
+        // Track peak amplitude in current phase
+        if abs(yAccel) > peakYInPhase {
+            peakYInPhase = abs(yAccel)
+        }
 
-        // Only check if current acceleration exceeds threshold
-        guard abs(currentY) > sweepThresholdY else { return }
-
-        // Don't count if we recently counted a stroke
-        guard currentIndex - lastStrokeSampleIndex >= 5 else { return }  // At least 5 samples (0.2 sec) between strokes
-
-        let currentIsPositive = currentY > 0
-
-        // Look back to find if we had opposite direction recently (simpler than full wave)
-        for j in 1..<sweepWavelength {
-            let lookbackIndex = currentIndex - j
-            guard lookbackIndex >= 0 else { break }
-
-            let prevY = yHistory[lookbackIndex]
-
-            // Found a sample above threshold in opposite direction = one stroke
-            if abs(prevY) > sweepThresholdY && (prevY > 0) != currentIsPositive {
-                countStroke()
-                lastStrokeSampleIndex = currentIndex
-                return
+        // Detect sign change (zero crossing)
+        if currentSign != 0 && lastYSign != 0 && currentSign != lastYSign {
+            // Sign changed - check if previous phase had enough amplitude
+            if peakYInPhase >= sweepThresholdY {
+                // Check debounce
+                let now = Date()
+                if lastStrokeTime == nil || now.timeIntervalSince(lastStrokeTime!) >= minStrokeInterval {
+                    countStroke()
+                    lastStrokeTime = now
+                }
             }
+            // Reset peak for new phase
+            peakYInPhase = abs(yAccel)
+        }
+
+        // Update last sign (only if not neutral)
+        if currentSign != 0 {
+            lastYSign = currentSign
         }
     }
 
@@ -381,8 +387,7 @@ final class WorkoutManager {
     private func resetStrokeCount() {
         strokeCountEnd = 0
         strokeCountTotal = 0
-        yHistory.removeAll()
-        lastStrokeSampleIndex = -sweepWavelength
+        resetSweepDetection()
     }
 
     // MARK: - Debug Data
@@ -462,8 +467,7 @@ final class WorkoutManager {
             stopwatchStartDate = nil
             // Start stroke detection and debug recording when timer stops
             shotStartTime = Date()
-            yHistory.removeAll()  // Clear history for fresh stroke detection
-            lastStrokeSampleIndex = -sweepWavelength
+            resetSweepDetection()  // Fresh start for stroke detection
             // Show position picker after delay (rock needs time to travel)
             if stopwatchTime > 0 {
                 Task {
