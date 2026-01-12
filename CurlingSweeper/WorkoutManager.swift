@@ -320,9 +320,12 @@ final class WorkoutManager {
         let yAccel = data.acceleration.y
         let zAccel = data.acceleration.z
 
-        // Record debug data after shot timer stops (while waiting for feedback)
-        let isRecordingShot = !isStopwatchRunning && stopwatchTime > 0 && shotStartTime != nil
-        if isDebugMode && isRecordingShot {
+        // Only process after shot timer stops (while waiting for feedback)
+        let isActiveShot = !isStopwatchRunning && stopwatchTime > 0 && shotStartTime != nil
+        guard isActiveShot else { return }
+
+        // Record debug data if enabled
+        if isDebugMode {
             let timestamp = Date().timeIntervalSince(shotStartTime!)
             debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
             debugSampleCount = debugData.count
@@ -457,8 +460,10 @@ final class WorkoutManager {
             // Stop the stopwatch, keep the time displayed
             isStopwatchRunning = false
             stopwatchStartDate = nil
-            // Start debug recording when timer stops (captures sweeping after rock release)
+            // Start stroke detection and debug recording when timer stops
             shotStartTime = Date()
+            yHistory.removeAll()  // Clear history for fresh stroke detection
+            lastStrokeSampleIndex = -sweepWavelength
             // Show position picker after delay (rock needs time to travel)
             if stopwatchTime > 0 {
                 Task {
