@@ -23,6 +23,7 @@ final class PhoneConnectivityManager: NSObject {
     // Cached parsed debug data
     var debugSampleCount: Int = 0
     var debugLastLines: [String] = []
+    var savedFileURL: URL?
 
     // Workout status from watch
     var isWorkoutActive = false
@@ -103,6 +104,21 @@ final class PhoneConnectivityManager: NSObject {
         let dataLines = lines.dropFirst().filter { !$0.isEmpty }
         debugLastLines = Array(dataLines.suffix(10))
     }
+
+    /// Saves CSV data to the Documents directory
+    private func saveToDocuments(_ csvData: String, fileName: String?) {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let name = fileName ?? "workout_\(Int(Date().timeIntervalSince1970)).csv"
+        let fileURL = documentsURL.appendingPathComponent(name)
+
+        do {
+            try csvData.write(to: fileURL, atomically: true, encoding: .utf8)
+            savedFileURL = fileURL
+            print("Saved debug CSV to: \(fileURL.path)")
+        } catch {
+            print("Failed to save CSV to Documents: \(error)")
+        }
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -150,10 +166,12 @@ extension PhoneConnectivityManager: WCSessionDelegate {
             if let type = message["type"] as? String, type == "workoutStatus" {
                 self.updateWorkoutStatus(from: message)
             } else if let csvData = message["debugCSV"] as? String {
+                let fileName = message["fileName"] as? String
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
-                self.receivedFileName = message["fileName"] as? String
+                self.receivedFileName = fileName
                 self.parseDebugData(csvData)
+                self.saveToDocuments(csvData, fileName: fileName)
                 print("Received debug CSV message: \(csvData.count) characters, \(self.debugSampleCount) samples")
             }
         }
@@ -186,10 +204,12 @@ extension PhoneConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         Task { @MainActor in
             if let csvData = userInfo["debugCSV"] as? String {
+                let fileName = userInfo["fileName"] as? String
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
-                self.receivedFileName = userInfo["fileName"] as? String
+                self.receivedFileName = fileName
                 self.parseDebugData(csvData)
+                self.saveToDocuments(csvData, fileName: fileName)
                 print("Received debug CSV userInfo: \(csvData.count) characters, \(self.debugSampleCount) samples")
             }
         }
@@ -207,11 +227,14 @@ extension PhoneConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
         Task { @MainActor in
             do {
-                let data = try String(contentsOf: file.fileURL, encoding: .utf8)
-                self.lastReceivedData = data
+                let csvData = try String(contentsOf: file.fileURL, encoding: .utf8)
+                let fileName = file.fileURL.lastPathComponent
+                self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
-                self.receivedFileName = file.fileURL.lastPathComponent
-                print("Received debug file: \(file.fileURL.lastPathComponent)")
+                self.receivedFileName = fileName
+                self.parseDebugData(csvData)
+                self.saveToDocuments(csvData, fileName: fileName)
+                print("Received debug file: \(fileName)")
             } catch {
                 print("Failed to read received file: \(error)")
             }

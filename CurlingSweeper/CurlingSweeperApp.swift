@@ -29,6 +29,10 @@ struct CurlingSweeperApp: App {
                             currentEnd: end
                         )
                     }
+                    // Wire up debug data auto-upload
+                    workoutManager.onSendDebugData = { csv, fileName in
+                        connectivityManager.sendDebugData(csv, fileName: fileName)
+                    }
                 }
         }
     }

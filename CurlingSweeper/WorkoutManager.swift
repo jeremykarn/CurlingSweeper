@@ -110,6 +110,9 @@ final class WorkoutManager {
     var onStatusUpdate: ((Bool, TimeInterval, Double, Double, Int, Int) -> Void)?
     private var lastSyncTime: Date?
 
+    // Callback for sending debug data to phone
+    var onSendDebugData: ((String, String) -> Void)?
+
     // MARK: - Private Properties
 
     private let healthStore = HKHealthStore()
@@ -233,6 +236,7 @@ final class WorkoutManager {
     }
 
     func endWorkout() async {
+        sendAndClearDebugData()  // Auto-upload any remaining debug data
         session?.end()
         stopTimer()
 
@@ -282,6 +286,7 @@ final class WorkoutManager {
     // MARK: - End Tracking
 
     func markNewEnd() {
+        sendAndClearDebugData()  // Auto-upload debug data at end of each end
         currentEnd += 1
         resetStopwatch()
         strokeCountEnd = 0  // Reset per-end stroke count
@@ -315,12 +320,9 @@ final class WorkoutManager {
         let yAccel = data.acceleration.y
         let zAccel = data.acceleration.z
 
-        // Record debug data if enabled and timing a shot (including waiting for feedback)
-        let isRecordingShot = isStopwatchRunning || (stopwatchTime > 0 && shotStartTime != nil)
+        // Record debug data after shot timer stops (while waiting for feedback)
+        let isRecordingShot = !isStopwatchRunning && stopwatchTime > 0 && shotStartTime != nil
         if isDebugMode && isRecordingShot {
-            if shotStartTime == nil {
-                shotStartTime = Date()
-            }
             let timestamp = Date().timeIntervalSince(shotStartTime!)
             debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
             debugSampleCount = debugData.count
@@ -381,6 +383,18 @@ final class WorkoutManager {
     }
 
     // MARK: - Debug Data
+
+    /// Sends debug data to phone if available, then clears it
+    private func sendAndClearDebugData() {
+        guard isDebugMode && hasDebugData else { return }
+        let csv = getDebugCSV()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm"
+        let dateStr = formatter.string(from: Date())
+        let fileName = "workout_\(dateStr)_end\(currentEnd).csv"
+        onSendDebugData?(csv, fileName)
+        clearDebugData()
+    }
 
     /// Returns debug data as CSV string
     func getDebugCSV() -> String {
@@ -443,6 +457,8 @@ final class WorkoutManager {
             // Stop the stopwatch, keep the time displayed
             isStopwatchRunning = false
             stopwatchStartDate = nil
+            // Start debug recording when timer stops (captures sweeping after rock release)
+            shotStartTime = Date()
             // Show position picker after delay (rock needs time to travel)
             if stopwatchTime > 0 {
                 Task {

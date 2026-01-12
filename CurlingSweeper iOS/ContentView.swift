@@ -103,6 +103,18 @@ struct ContentView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
+                        if let savedURL = connectivityManager.savedFileURL {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Saved to Files app")
+                                    .font(.caption)
+                            }
+                            Text(savedURL.lastPathComponent)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
                         // Last 10 lines preview
                         if !connectivityManager.debugLastLines.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {

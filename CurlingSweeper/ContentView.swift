@@ -367,8 +367,10 @@ struct PausedSummaryView: View {
 
                         Button {
                             let csv = workoutManager.getDebugCSV()
-                            let timestamp = Int(Date().timeIntervalSince1970)
-                            let fileName = "workout_\(timestamp).csv"
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "yyyy-MM-dd_HH-mm"
+                            let dateStr = formatter.string(from: Date())
+                            let fileName = "workout_\(dateStr)_end\(workoutManager.currentEnd).csv"
                             connectivityManager.sendDebugData(csv, fileName: fileName)
                         } label: {
                             Label("Send to iPhone", systemImage: "iphone.and.arrow.forward")
