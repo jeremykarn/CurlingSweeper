@@ -52,20 +52,28 @@ final class WatchConnectivityManager: NSObject {
     func syncWorkoutStatus(isActive: Bool, elapsedTime: TimeInterval, calories: Double, heartRate: Double, strokeCount: Int, currentEnd: Int) {
         guard let session = session else { return }
 
-        let context: [String: Any] = [
+        let data: [String: Any] = [
+            "type": "workoutStatus",
             "isWorkoutActive": isActive,
             "elapsedTime": elapsedTime,
             "calories": calories,
             "heartRate": heartRate,
             "strokeCount": strokeCount,
-            "currentEnd": currentEnd,
-            "lastUpdate": Date().timeIntervalSince1970
+            "currentEnd": currentEnd
         ]
 
-        do {
-            try session.updateApplicationContext(context)
-        } catch {
-            print("Failed to update application context: \(error)")
+        // Use sendMessage for real-time updates when reachable
+        if session.isReachable {
+            session.sendMessage(data, replyHandler: nil) { error in
+                print("sendMessage error: \(error.localizedDescription)")
+            }
+        } else {
+            // Fall back to application context for background sync
+            do {
+                try session.updateApplicationContext(data)
+            } catch {
+                print("Failed to update application context: \(error)")
+            }
         }
     }
 }

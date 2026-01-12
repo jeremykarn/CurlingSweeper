@@ -38,6 +38,13 @@ final class PhoneConnectivityManager: NSObject {
             session = WCSession.default
             session?.delegate = self
             session?.activate()
+
+            // Load any cached application context
+            if let context = session?.receivedApplicationContext, !context.isEmpty {
+                Task { @MainActor in
+                    self.updateWorkoutStatus(from: context)
+                }
+            }
         }
     }
 
@@ -123,16 +130,42 @@ extension PhoneConnectivityManager: WCSessionDelegate {
         }
     }
 
-    // Receive message with CSV data
+    // Receive message with CSV data or workout status
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         Task { @MainActor in
-            if let csvData = message["debugCSV"] as? String {
+            // Check message type
+            if let type = message["type"] as? String, type == "workoutStatus" {
+                self.updateWorkoutStatus(from: message)
+            } else if let csvData = message["debugCSV"] as? String {
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
                 self.receivedFileName = message["fileName"] as? String
                 print("Received debug CSV message: \(csvData.count) characters")
             }
         }
+    }
+
+    @MainActor
+    private func updateWorkoutStatus(from data: [String: Any]) {
+        if let isActive = data["isWorkoutActive"] as? Bool {
+            self.isWorkoutActive = isActive
+        }
+        if let elapsed = data["elapsedTime"] as? TimeInterval {
+            self.elapsedTime = elapsed
+        }
+        if let cal = data["calories"] as? Double {
+            self.calories = cal
+        }
+        if let hr = data["heartRate"] as? Double {
+            self.heartRate = hr
+        }
+        if let strokes = data["strokeCount"] as? Int {
+            self.strokeCount = strokes
+        }
+        if let end = data["currentEnd"] as? Int {
+            self.currentEnd = end
+        }
+        self.lastStatusUpdate = Date()
     }
 
     // Receive transferUserInfo data
@@ -150,26 +183,8 @@ extension PhoneConnectivityManager: WCSessionDelegate {
     // Receive application context (workout status)
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         Task { @MainActor in
-            if let isActive = applicationContext["isWorkoutActive"] as? Bool {
-                self.isWorkoutActive = isActive
-            }
-            if let elapsed = applicationContext["elapsedTime"] as? TimeInterval {
-                self.elapsedTime = elapsed
-            }
-            if let cal = applicationContext["calories"] as? Double {
-                self.calories = cal
-            }
-            if let hr = applicationContext["heartRate"] as? Double {
-                self.heartRate = hr
-            }
-            if let strokes = applicationContext["strokeCount"] as? Int {
-                self.strokeCount = strokes
-            }
-            if let end = applicationContext["currentEnd"] as? Int {
-                self.currentEnd = end
-            }
-            self.lastStatusUpdate = Date()
-            print("Received workout status: elapsed=\(self.elapsedTime), active=\(self.isWorkoutActive)")
+            self.updateWorkoutStatus(from: applicationContext)
+            print("Received workout status via context: elapsed=\(self.elapsedTime), active=\(self.isWorkoutActive)")
         }
     }
 
