@@ -20,6 +20,10 @@ final class PhoneConnectivityManager: NSObject {
     var lastReceivedDate: Date?
     var receivedFileName: String?
 
+    // Cached parsed debug data
+    var debugSampleCount: Int = 0
+    var debugLastLines: [String] = []
+
     // Workout status from watch
     var isWorkoutActive = false
     var elapsedTime: TimeInterval = 0
@@ -89,6 +93,15 @@ final class PhoneConnectivityManager: NSObject {
         lastReceivedData = nil
         lastReceivedDate = nil
         receivedFileName = nil
+        debugSampleCount = 0
+        debugLastLines = []
+    }
+
+    private func parseDebugData(_ csvData: String) {
+        let lines = csvData.components(separatedBy: "\n")
+        debugSampleCount = max(0, lines.count - 2) // Subtract header and trailing newline
+        let dataLines = lines.dropFirst().filter { !$0.isEmpty }
+        debugLastLines = Array(dataLines.suffix(10))
     }
 }
 
@@ -140,7 +153,8 @@ extension PhoneConnectivityManager: WCSessionDelegate {
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
                 self.receivedFileName = message["fileName"] as? String
-                print("Received debug CSV message: \(csvData.count) characters")
+                self.parseDebugData(csvData)
+                print("Received debug CSV message: \(csvData.count) characters, \(self.debugSampleCount) samples")
             }
         }
     }
@@ -175,7 +189,8 @@ extension PhoneConnectivityManager: WCSessionDelegate {
                 self.lastReceivedData = csvData
                 self.lastReceivedDate = Date()
                 self.receivedFileName = userInfo["fileName"] as? String
-                print("Received debug CSV userInfo: \(csvData.count) characters")
+                self.parseDebugData(csvData)
+                print("Received debug CSV userInfo: \(csvData.count) characters, \(self.debugSampleCount) samples")
             }
         }
     }

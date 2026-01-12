@@ -99,26 +99,20 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        let lines = csvData.components(separatedBy: "\n")
-                        let lineCount = lines.count - 1
-                        Text("\(lineCount) samples")
+                        Text("\(connectivityManager.debugSampleCount) samples")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
                         // Last 10 lines preview
-                        let dataLines = lines.dropFirst() // Skip header
-                        let last10 = dataLines.suffix(10)
-                        if !last10.isEmpty {
+                        if !connectivityManager.debugLastLines.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Last 10 samples:")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                ForEach(Array(last10.enumerated()), id: \.offset) { _, line in
-                                    if !line.isEmpty {
-                                        Text(line)
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                    }
+                                ForEach(Array(connectivityManager.debugLastLines.enumerated()), id: \.offset) { _, line in
+                                    Text(line)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
