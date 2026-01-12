@@ -103,7 +103,7 @@ final class WorkoutManager {
     var debugSampleCount: Int = 0
     var currentShotIndex: Int = 0
     private var nextShotIndex: Int = 0
-    private var debugData: [(shot: Int, timestamp: TimeInterval, x: Double, y: Double, z: Double)] = []
+    private var debugData: [(shot: Int, timestamp: TimeInterval, x: Double, y: Double, z: Double, strokes: Int)] = []
     private var shotStartTime: Date?
 
     // Callback for syncing status to phone
@@ -327,7 +327,7 @@ final class WorkoutManager {
         // Record debug data if enabled
         if isDebugMode {
             let timestamp = Date().timeIntervalSince(shotStartTime!)
-            debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel))
+            debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
             debugSampleCount = debugData.count
         }
 
@@ -401,10 +401,10 @@ final class WorkoutManager {
 
     /// Returns debug data as CSV string
     func getDebugCSV() -> String {
-        var csv = "shot,timestamp,x,y,z\n"
+        var csv = "shot,timestamp,x,y,z,strokes\n"
         for sample in debugData {
-            csv += String(format: "%d,%.4f,%.6f,%.6f,%.6f\n",
-                          sample.shot, sample.timestamp, sample.x, sample.y, sample.z)
+            csv += String(format: "%d,%.4f,%.6f,%.6f,%.6f,%d\n",
+                          sample.shot, sample.timestamp, sample.x, sample.y, sample.z, sample.strokes)
         }
         return csv
     }
