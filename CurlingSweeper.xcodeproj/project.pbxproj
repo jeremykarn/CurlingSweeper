@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0D8014EC2F1479FC00AC1515 /* CurlingSweeper.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0DEE976C2EF8C58E00233A61 /* CurlingSweeper.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0D65693E2F0FF512006CF4F2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -20,6 +24,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 0D6569302F0FF510006CF4F2;
 			remoteInfo = "CurlingSweeper iOS";
+		};
+		0D8014ED2F1479FC00AC1515 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0DEE97642EF8C58E00233A61 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0DEE976B2EF8C58E00233A61;
+			remoteInfo = CurlingSweeper;
 		};
 		0DEE977A2EF8C59000233A61 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -38,6 +49,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		0D8014EF2F1479FC00AC1515 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				0D8014EC2F1479FC00AC1515 /* CurlingSweeper.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0DEE97B52EF8C59100233A61 /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -138,6 +160,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0D8014EB2F1479FC00AC1515 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		0DEE97632EF8C58E00233A61 = {
 			isa = PBXGroup;
 			children = (
@@ -147,6 +176,7 @@
 				0D6569322F0FF510006CF4F2 /* CurlingSweeper iOS */,
 				0D6569402F0FF512006CF4F2 /* CurlingSweeper iOSTests */,
 				0D65694A2F0FF512006CF4F2 /* CurlingSweeper iOSUITests */,
+				0D8014EB2F1479FC00AC1515 /* Frameworks */,
 				0DEE976D2EF8C58E00233A61 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -174,10 +204,12 @@
 				0D65692D2F0FF510006CF4F2 /* Sources */,
 				0D65692E2F0FF510006CF4F2 /* Frameworks */,
 				0D65692F2F0FF510006CF4F2 /* Resources */,
+				0D8014EF2F1479FC00AC1515 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0D8014EE2F1479FC00AC1515 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0D6569322F0FF510006CF4F2 /* CurlingSweeper iOS */,
@@ -462,6 +494,11 @@
 			isa = PBXTargetDependency;
 			target = 0D6569302F0FF510006CF4F2 /* CurlingSweeper iOS */;
 			targetProxy = 0D6569482F0FF512006CF4F2 /* PBXContainerItemProxy */;
+		};
+		0D8014EE2F1479FC00AC1515 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0DEE976B2EF8C58E00233A61 /* CurlingSweeper */;
+			targetProxy = 0D8014ED2F1479FC00AC1515 /* PBXContainerItemProxy */;
 		};
 		0DEE977B2EF8C59000233A61 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

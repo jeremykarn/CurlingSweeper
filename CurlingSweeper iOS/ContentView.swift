@@ -70,12 +70,12 @@ struct ContentView: View {
                 } else {
                     // Watch connection status
                     HStack {
-                        Image(systemName: connectivityManager.isWatchReachable ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
+                        Image(systemName: connectivityManager.isConnected ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
                             .font(.title)
-                            .foregroundStyle(connectivityManager.isWatchReachable ? .green : .secondary)
+                            .foregroundStyle(connectivityManager.isConnected ? .green : .secondary)
 
-                        Text(connectivityManager.isWatchReachable ? "Watch Connected" : "Watch Not Reachable")
-                            .foregroundStyle(connectivityManager.isWatchReachable ? .primary : .secondary)
+                        Text(connectivityManager.connectionStatus)
+                            .foregroundStyle(connectivityManager.isConnected ? .primary : .secondary)
                     }
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))

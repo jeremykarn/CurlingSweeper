@@ -14,6 +14,8 @@ import Observation
 final class PhoneConnectivityManager: NSObject {
 
     var isWatchReachable = false
+    var isWatchPaired = false
+    var isWatchAppInstalled = false
     var lastReceivedData: String?
     var lastReceivedDate: Date?
     var receivedFileName: String?
@@ -37,6 +39,22 @@ final class PhoneConnectivityManager: NSObject {
             session?.delegate = self
             session?.activate()
         }
+    }
+
+    var connectionStatus: String {
+        if !isWatchPaired {
+            return "No Watch Paired"
+        } else if !isWatchAppInstalled {
+            return "Watch App Not Installed"
+        } else if isWatchReachable {
+            return "Watch Connected"
+        } else {
+            return "Watch App Installed"
+        }
+    }
+
+    var isConnected: Bool {
+        isWatchPaired && isWatchAppInstalled
     }
 
     func formattedElapsedTime() -> String {
@@ -72,14 +90,20 @@ final class PhoneConnectivityManager: NSObject {
 extension PhoneConnectivityManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        let paired = session.isPaired
+        let installed = session.isWatchAppInstalled
+        let reachable = session.isReachable
+
+        print("WCSession activated: state=\(activationState.rawValue), paired=\(paired), installed=\(installed), reachable=\(reachable)")
+
         Task { @MainActor in
-            self.isWatchReachable = session.isReachable
+            self.isWatchPaired = paired
+            self.isWatchAppInstalled = installed
+            self.isWatchReachable = reachable
         }
 
         if let error = error {
-            print("WCSession activation failed: \(error.localizedDescription)")
-        } else {
-            print("WCSession activated with state: \(activationState.rawValue)")
+            print("WCSession activation error: \(error.localizedDescription)")
         }
     }
 
