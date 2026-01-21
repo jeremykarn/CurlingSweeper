@@ -209,75 +209,54 @@ struct WorkoutView: View {
     }
 }
 
-// MARK: - Shot Timer View
+// MARK: - Shot Tracking View
 
 struct ShotTimerView: View {
     @Environment(WorkoutManager.self) var workoutManager
     @Binding var isPresented: Bool
-    @State private var showingPositionPicker = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Spacer()
 
-            // Timer display
-            Text(workoutManager.formattedStopwatchTime())
-                .font(.system(size: 48, weight: .bold, design: .monospaced))
-                .foregroundStyle(workoutManager.isStopwatchRunning ? .green : .primary)
+            Text("Tracking Strokes")
+                .font(.title2)
+                .foregroundStyle(.green)
 
-            // Estimate or instruction
-            if let estimate = workoutManager.currentEstimate {
-                Text(estimate.label)
-                    .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(.orange)
-            } else if workoutManager.stopwatchTime > 0 {
-                Text("Stopped")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Tap to Start")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
+            Text("\(workoutManager.strokeCountEnd)")
+                .font(.system(size: 72, weight: .bold, design: .monospaced))
+                .foregroundStyle(.cyan)
+
+            Text("strokes this end")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Spacer()
 
-            // Cancel button (only before starting)
-            if !workoutManager.isStopwatchRunning && workoutManager.stopwatchTime == 0 {
-                Button("Cancel") {
-                    isPresented = false
-                }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
+            Button {
+                workoutManager.endShot()
+                isPresented = false
+            } label: {
+                Text("Shot Ended")
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .padding(.horizontal)
         }
+        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if workoutManager.isStopwatchRunning {
-                // Stop the timer - will show position picker after 10s
-                workoutManager.toggleStopwatch()
-            } else if workoutManager.stopwatchTime == 0 {
-                // Start the timer
-                workoutManager.toggleStopwatch()
-            }
-        }
         .background(Color.black)
         .onAppear {
-            // Reset stopwatch each time the timer view opens
-            workoutManager.resetStopwatch()
+            workoutManager.startShot()
         }
-        .onChange(of: workoutManager.showPositionPicker) { _, showing in
-            if showing {
-                showingPositionPicker = true
+        .onDisappear {
+            // Ensure shot ends if view is dismissed another way
+            if workoutManager.isShotActive {
+                workoutManager.endShot()
             }
-        }
-        .sheet(isPresented: $showingPositionPicker, onDismiss: {
-            // Dismiss shot timer after position picker closes
-            workoutManager.showPositionPicker = false
-            isPresented = false
-        }) {
-            PositionPickerView()
         }
     }
 }
@@ -353,17 +332,9 @@ struct PausedSummaryView: View {
                         .font(.caption)
 
                     if workoutManager.hasDebugData {
-                        HStack {
-                            if let pos = workoutManager.lastRecordedPosition {
-                                Text("Last: \(pos.label)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("\(workoutManager.debugSampleCount) samples")
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("\(workoutManager.debugSampleCount) samples")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
 
                         Button {
                             let csv = workoutManager.getDebugCSV()
@@ -385,7 +356,7 @@ struct PausedSummaryView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if workoutManager.isDebugMode {
-                        Text("Recording during timed shots")
+                        Text("Recording during shots")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -403,85 +374,6 @@ struct PausedSummaryView: View {
                 .tint(.green)
             }
             .padding()
-        }
-    }
-}
-
-// MARK: - Position Picker View
-
-struct PositionPickerView: View {
-    @Environment(WorkoutManager.self) var workoutManager
-    @Environment(\.dismiss) var dismiss
-
-    // Common positions shown first
-    private let quickPositions: [RockPosition] = [
-        .hog, .weight4, .weight5, .weight6, .hit
-    ]
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 8) {
-                    // Time and estimate (compact)
-                    HStack {
-                        Text(workoutManager.formattedStopwatchTime())
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-
-                        if let estimate = workoutManager.currentEstimate {
-                            Text("→ \(estimate.label)")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    .foregroundStyle(.secondary)
-
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 8) {
-                        ForEach(RockPosition.allCases) { position in
-                            Button {
-                                workoutManager.recordSplit(position: position)
-                                dismiss()
-                            } label: {
-                                Text(position.label)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(buttonColor(for: position))
-                        }
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Record Position")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Skip") {
-                        workoutManager.showPositionPicker = false
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private func buttonColor(for position: RockPosition) -> Color {
-        switch position {
-        case .hog:
-            return .red
-        case .weight1, .weight2, .weight3:
-            return .blue
-        case .weight4, .weight5, .weight6:
-            return .green
-        case .weight7, .weight8, .weight9, .weight10:
-            return .orange
-        case .hack, .board, .hit:
-            return .purple
         }
     }
 }

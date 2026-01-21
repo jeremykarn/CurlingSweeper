@@ -10,62 +10,6 @@ import HealthKit
 import Observation
 import CoreMotion
 
-// MARK: - Rock Position
-
-enum RockPosition: Int, CaseIterable, Identifiable, Comparable {
-    case hog = 0
-    case weight1 = 1
-    case weight2 = 2
-    case weight3 = 3
-    case weight4 = 4
-    case weight5 = 5
-    case weight6 = 6
-    case weight7 = 7
-    case weight8 = 8
-    case weight9 = 9
-    case weight10 = 10
-    case hack = 11
-    case board = 12
-    case hit = 13
-
-    var id: Int { rawValue }
-
-    var label: String {
-        switch self {
-        case .hog: return "HOG"
-        case .weight1: return "1"
-        case .weight2: return "2"
-        case .weight3: return "3"
-        case .weight4: return "4"
-        case .weight5: return "5"
-        case .weight6: return "6"
-        case .weight7: return "7"
-        case .weight8: return "8"
-        case .weight9: return "9"
-        case .weight10: return "10"
-        case .hack: return "HACK"
-        case .board: return "BOARD"
-        case .hit: return "HIT"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .hog: return "Hogged (didn't reach)"
-        case .weight1, .weight2, .weight3, .weight4, .weight5,
-             .weight6, .weight7, .weight8, .weight9, .weight10:
-            return "Weight \(rawValue)"
-        case .hack: return "Through to hack"
-        case .board: return "Hit the board"
-        case .hit: return "Takeout"
-        }
-    }
-
-    static func < (lhs: RockPosition, rhs: RockPosition) -> Bool {
-        lhs.rawValue < rhs.rawValue
-    }
-}
-
 @Observable
 @MainActor
 final class WorkoutManager {
@@ -83,13 +27,8 @@ final class WorkoutManager {
     private var heartRateSum: Double = 0
     private var heartRateCount: Int = 0
 
-    // Stopwatch properties
-    var isStopwatchRunning = false
-    var stopwatchTime: TimeInterval = 0
-
-    // Rock position estimation
-    var currentEstimate: RockPosition?
-    var showPositionPicker = false
+    // Shot tracking
+    var isShotActive = false
 
     // End tracking
     var currentEnd: Int = 0
@@ -131,29 +70,6 @@ final class WorkoutManager {
     private let minStrokeInterval: TimeInterval = 0.08  // Minimum 80ms between strokes
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
-    private var stopwatchStartDate: Date?
-
-    // Split times in seconds (default values from Garmin app, converted from ms)
-    // Index 0 = HOG, 1-10 = weights, 11 = HACK, 12 = BOARD, 13 = HIT
-    private var splitTimes: [TimeInterval] = [
-        99.999,  // HOG (essentially infinite - rock didn't make it)
-        4.400,   // Weight 1
-        4.300,   // Weight 2
-        4.200,   // Weight 3
-        4.100,   // Weight 4
-        4.000,   // Weight 5
-        3.900,   // Weight 6
-        3.800,   // Weight 7
-        3.700,   // Weight 8
-        3.600,   // Weight 9
-        3.500,   // Weight 10
-        3.400,   // HACK
-        3.300,   // BOARD
-        3.200    // HIT
-    ]
-
-    // Recorded times (-1 means not yet recorded)
-    private var recordedTimes: [TimeInterval] = Array(repeating: -1, count: 14)
 
     // MARK: - Initialization
 
@@ -271,7 +187,7 @@ final class WorkoutManager {
         currentEnd = 0
         currentShotIndex = 0
         nextShotIndex = 0
-        resetStopwatch()
+        isShotActive = false
         stopMotionUpdates()
         resetStrokeCount()
         session = nil
@@ -288,7 +204,7 @@ final class WorkoutManager {
     func markNewEnd() {
         sendAndClearDebugData()  // Auto-upload debug data at end of each end
         currentEnd += 1
-        resetStopwatch()
+        isShotActive = false
         strokeCountEnd = 0  // Reset per-end stroke count
     }
 
@@ -325,16 +241,15 @@ final class WorkoutManager {
         let yAccel = data.acceleration.y
         let zAccel = data.acceleration.z
 
-        // Only process after shot timer stops (while waiting for feedback)
-        let isActiveShot = !isStopwatchRunning && stopwatchTime > 0 && shotStartTime != nil
-        guard isActiveShot else { return }
+        // Only process when shot is active
+        guard isShotActive, let startTime = shotStartTime else { return }
 
         // Detect sweep motion
         detectSweep(yAccel)
 
         // Record debug data if enabled
         if isDebugMode {
-            let timestamp = Date().timeIntervalSince(shotStartTime!)
+            let timestamp = Date().timeIntervalSince(startTime)
             debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
             debugSampleCount = debugData.count
         }
@@ -445,12 +360,6 @@ final class WorkoutManager {
         guard let startDate = startDate else { return }
         elapsedTime = Date().timeIntervalSince(startDate)
 
-        // Update stopwatch if running
-        if isStopwatchRunning, let stopwatchStart = stopwatchStartDate {
-            stopwatchTime = Date().timeIntervalSince(stopwatchStart)
-            updateEstimate()
-        }
-
         // Sync status to phone every second
         if lastSyncTime == nil || Date().timeIntervalSince(lastSyncTime!) >= 1.0 {
             lastSyncTime = Date()
@@ -458,152 +367,19 @@ final class WorkoutManager {
         }
     }
 
-    // MARK: - Stopwatch
+    // MARK: - Shot Tracking
 
-    func toggleStopwatch() {
-        if isStopwatchRunning {
-            // Stop the stopwatch, keep the time displayed
-            isStopwatchRunning = false
-            stopwatchStartDate = nil
-            // Start stroke detection and debug recording when timer stops
-            shotStartTime = Date()
-            resetSweepDetection()  // Fresh start for stroke detection
-            // Show position picker after delay (rock needs time to travel)
-            if stopwatchTime > 0 {
-                Task {
-                    try? await Task.sleep(for: .seconds(10))
-                    // Only show picker if we haven't started a new timing
-                    if !isStopwatchRunning && !showPositionPicker {
-                        showPositionPicker = true
-                    }
-                }
-            }
-        } else {
-            // Start fresh stopwatch
-            stopwatchTime = 0
-            stopwatchStartDate = Date()
-            isStopwatchRunning = true
-            currentEstimate = nil
-            showPositionPicker = false
-
-            // Capture shot index and reset shot timer for debug recording
-            currentShotIndex = nextShotIndex
-            shotStartTime = nil  // Reset per-shot timestamp
-        }
+    func startShot() {
+        isShotActive = true
+        shotStartTime = Date()
+        currentShotIndex = nextShotIndex
+        resetSweepDetection()
     }
 
-    func resetStopwatch() {
-        isStopwatchRunning = false
-        stopwatchTime = 0
-        stopwatchStartDate = nil
-        currentEstimate = nil
-    }
-
-    // MARK: - Rock Position Estimation
-
-    /// Returns the estimated rock position based on current stopwatch time
-    func getStopwatchEstimate() -> RockPosition? {
-        guard stopwatchTime > 0 else { return nil }
-
-        // Find the position where the time is less than or equal to the split time
-        // Faster times = further positions (lower split time index = shorter/slower)
-        for i in stride(from: splitTimes.count - 1, through: 0, by: -1) {
-            if stopwatchTime <= splitTimes[i] {
-                return RockPosition(rawValue: i)
-            }
-        }
-        return .hog
-    }
-
-    /// Updates the current estimate (called by timer)
-    private func updateEstimate() {
-        if isStopwatchRunning {
-            currentEstimate = getStopwatchEstimate()
-        }
-    }
-
-    /// Records where a rock actually stopped and adjusts future estimates
-    func recordSplit(position: RockPosition) {
-        guard stopwatchTime > 0 else { return }
-
-        let index = position.rawValue
-        let time = stopwatchTime
-
-        // Increment shot index for next shot and stop debug recording
+    func endShot() {
+        isShotActive = false
         nextShotIndex += 1
-        shotStartTime = nil  // Stop recording for this shot
-
-        // Record this time for the position
-        // For HOG: only record if faster than existing (rock was going faster than expected)
-        // For HIT: only record if slower than existing
-        // For other positions: always record
-        if index > 0 && index < recordedTimes.count - 1 {
-            recordedTimes[index] = time
-        } else if index == 0 && (recordedTimes[index] < 0 || recordedTimes[index] > time) {
-            recordedTimes[index] = time
-        } else if index == recordedTimes.count - 1 && (recordedTimes[index] < 0 || recordedTimes[index] < time) {
-            recordedTimes[index] = time
-        }
-
-        // Invalidate inconsistent records
-        for i in 0..<recordedTimes.count {
-            if i < index && recordedTimes[i] >= 0 && recordedTimes[i] <= time {
-                // Faster time recorded for shorter throw - ice may have sped up
-                recordedTimes[i] = -1
-            }
-            if i > index && recordedTimes[i] >= 0 && recordedTimes[i] >= time {
-                // Slower time recorded for longer throw - ice may have slowed down
-                recordedTimes[i] = -1
-            }
-        }
-
-        // Recalculate split times based on recorded data
-        recalculateSplitTimes()
-
-        // Store the position in debug data filename for reference
-        lastRecordedPosition = position
-
-        // Hide picker and reset for next timing
-        showPositionPicker = false
-    }
-
-    // Last recorded position for debug filename
-    var lastRecordedPosition: RockPosition?
-
-    /// Recalculates split times based on recorded observations
-    private func recalculateSplitTimes() {
-        var lastRecordedIndex = -1
-        var averageDiff: TimeInterval = 0.100  // Default 100ms between positions
-
-        for i in 0..<recordedTimes.count {
-            if recordedTimes[i] > 0 {
-                splitTimes[i] = recordedTimes[i]
-
-                if lastRecordedIndex >= 0 {
-                    // Calculate average time difference between recorded positions
-                    averageDiff = (recordedTimes[lastRecordedIndex] - recordedTimes[i]) / Double(i - lastRecordedIndex)
-
-                    // Fill in gaps between last recorded and current
-                    for j in (lastRecordedIndex + 1)..<i {
-                        splitTimes[j] = recordedTimes[lastRecordedIndex] - Double(j - lastRecordedIndex) * averageDiff
-                    }
-                } else if i > 0 {
-                    // No previous record, extrapolate backwards
-                    for j in stride(from: i - 1, through: 0, by: -1) {
-                        splitTimes[j] = recordedTimes[i] + Double(i - j) * averageDiff
-                    }
-                }
-
-                lastRecordedIndex = i
-            }
-        }
-
-        // Extrapolate forward from last recorded position
-        if lastRecordedIndex >= 0 && lastRecordedIndex < recordedTimes.count - 1 {
-            for j in (lastRecordedIndex + 1)..<recordedTimes.count {
-                splitTimes[j] = recordedTimes[lastRecordedIndex] - Double(j - lastRecordedIndex) * averageDiff
-            }
-        }
+        shotStartTime = nil
     }
 
     // MARK: - Formatting Helpers
@@ -613,12 +389,6 @@ final class WorkoutManager {
         let seconds = Int(elapsedTime) % 60
         let tenths = Int((elapsedTime.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
-    }
-
-    func formattedStopwatchTime() -> String {
-        let seconds = Int(stopwatchTime)
-        let hundredths = Int((stopwatchTime.truncatingRemainder(dividingBy: 1)) * 100)
-        return String(format: "%d.%02d", seconds, hundredths)
     }
 
     // MARK: - Delegate Callbacks
