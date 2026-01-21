@@ -41,8 +41,15 @@ final class WorkoutManager {
     var isDebugMode = false
     var debugSampleCount: Int = 0
     var currentShotInEnd: Int = 0    // Shot number within current end (1-based)
-    private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double, strokes: Int)] = []
+    private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double, vx: Double, vy: Double, vz: Double, strokes: Int)] = []
     private var shotStartTime: Date?
+    private var lastMotionTime: Date?
+
+    // Velocity estimation (integrated from acceleration)
+    private var velocityX: Double = 0
+    private var velocityY: Double = 0
+    private var velocityZ: Double = 0
+    private let zuptThreshold: Double = 0.02  // Zero-velocity update threshold (g)
 
     // Callback for syncing status to phone
     var onStatusUpdate: ((Bool, TimeInterval, Double, Double, Int, Int) -> Void)?
@@ -247,10 +254,30 @@ final class WorkoutManager {
         // Detect sweep motion
         detectSweep(yAccel)
 
+        // Calculate velocity by integrating acceleration
+        let now = Date()
+        if let lastTime = lastMotionTime {
+            let dt = now.timeIntervalSince(lastTime)
+
+            // Zero-velocity update: reset if acceleration is near zero (device stationary)
+            let accelMagnitude = sqrt(xAccel * xAccel + yAccel * yAccel + zAccel * zAccel)
+            if accelMagnitude < zuptThreshold {
+                velocityX = 0
+                velocityY = 0
+                velocityZ = 0
+            } else {
+                // Integrate: v += a * dt (convert g to m/s²)
+                velocityX += xAccel * 9.81 * dt
+                velocityY += yAccel * 9.81 * dt
+                velocityZ += zAccel * 9.81 * dt
+            }
+        }
+        lastMotionTime = now
+
         // Record debug data if enabled
         if isDebugMode {
-            let timestamp = Date().timeIntervalSince(startTime)
-            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
+            let timestamp = now.timeIntervalSince(startTime)
+            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, vx: velocityX, vy: velocityY, vz: velocityZ, strokes: strokeCountEnd))
             debugSampleCount = debugData.count
         }
     }
@@ -321,10 +348,10 @@ final class WorkoutManager {
 
     /// Returns debug data as CSV string
     func getDebugCSV() -> String {
-        var csv = "timestamp,x,y,z,strokes\n"
+        var csv = "timestamp,x,y,z,vx,vy,vz,strokes\n"
         for sample in debugData {
-            csv += String(format: "%.4f,%.6f,%.6f,%.6f,%d\n",
-                          sample.timestamp, sample.x, sample.y, sample.z, sample.strokes)
+            csv += String(format: "%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%d\n",
+                          sample.timestamp, sample.x, sample.y, sample.z, sample.vx, sample.vy, sample.vz, sample.strokes)
         }
         return csv
     }
@@ -334,6 +361,15 @@ final class WorkoutManager {
         debugData.removeAll()
         debugSampleCount = 0
         shotStartTime = nil
+        resetVelocity()
+    }
+
+    /// Resets velocity estimation
+    private func resetVelocity() {
+        velocityX = 0
+        velocityY = 0
+        velocityZ = 0
+        lastMotionTime = nil
     }
 
     /// Returns true if there is debug data to send
@@ -374,6 +410,7 @@ final class WorkoutManager {
         isShotActive = true
         shotStartTime = Date()
         resetSweepDetection()
+        resetVelocity()
     }
 
     func endShot() {

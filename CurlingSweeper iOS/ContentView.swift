@@ -16,6 +16,9 @@ struct AccelDataPoint: Identifiable {
     let x: Double
     let y: Double
     let z: Double
+    let vx: Double
+    let vy: Double
+    let vz: Double
     let strokes: Int
 }
 
@@ -387,6 +390,67 @@ struct DebugFileBrowserView: View {
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
 
+                    // Velocity Chart
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Velocity (Estimated)")
+                                .font(.headline)
+                            Spacer()
+                            Text("m/s")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Legend
+                        HStack(spacing: 16) {
+                            ForEach(AccelAxis.allCases, id: \.self) { axis in
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(axis.color)
+                                        .frame(width: 8, height: 8)
+                                    Text("V\(axis.rawValue.lowercased())")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        Chart {
+                            ForEach(chartData) { point in
+                                LineMark(
+                                    x: .value("Time", point.timestamp),
+                                    y: .value("Velocity", point.vx),
+                                    series: .value("Axis", "VX")
+                                )
+                                .foregroundStyle(AccelAxis.x.color)
+                                .lineStyle(StrokeStyle(lineWidth: 1))
+
+                                LineMark(
+                                    x: .value("Time", point.timestamp),
+                                    y: .value("Velocity", point.vy),
+                                    series: .value("Axis", "VY")
+                                )
+                                .foregroundStyle(AccelAxis.y.color)
+                                .lineStyle(StrokeStyle(lineWidth: 1))
+
+                                LineMark(
+                                    x: .value("Time", point.timestamp),
+                                    y: .value("Velocity", point.vz),
+                                    series: .value("Axis", "VZ")
+                                )
+                                .foregroundStyle(AccelAxis.z.color)
+                                .lineStyle(StrokeStyle(lineWidth: 1))
+                            }
+                        }
+                        .chartXAxisLabel("Time (s)")
+                        .chartYAxisLabel("Velocity (m/s)")
+                        .chartScrollableAxes(.horizontal)
+                        .chartXVisibleDomain(length: visibleDomainLength)
+                        .frame(height: 200)
+                    }
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+
                     // Stats
                     if let lastPoint = chartData.last {
                         HStack {
@@ -456,17 +520,21 @@ struct DebugFileBrowserView: View {
         var parsed: [AccelDataPoint] = []
 
         // Skip header line
+        // CSV format: timestamp,x,y,z,vx,vy,vz,strokes
         for line in lines.dropFirst() {
             let values = line.components(separatedBy: ",")
-            guard values.count >= 5,
+            guard values.count >= 8,
                   let timestamp = Double(values[0]),
                   let x = Double(values[1]),
                   let y = Double(values[2]),
                   let z = Double(values[3]),
-                  let strokes = Int(values[4]) else {
+                  let vx = Double(values[4]),
+                  let vy = Double(values[5]),
+                  let vz = Double(values[6]),
+                  let strokes = Int(values[7]) else {
                 continue
             }
-            parsed.append(AccelDataPoint(timestamp: timestamp, x: x, y: y, z: z, strokes: strokes))
+            parsed.append(AccelDataPoint(timestamp: timestamp, x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, strokes: strokes))
         }
 
         chartData = parsed
