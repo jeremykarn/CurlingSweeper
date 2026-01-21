@@ -111,7 +111,7 @@ struct WorkoutView: View {
                     .frame(maxWidth: .infinity)
 
                     VStack(spacing: 2) {
-                        Text("\(workoutManager.strokeCountEnd)")
+                        Text("\(workoutManager.strokeCountTotal)")
                             .font(.system(size: 16, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.cyan)
                         Text("Strokes")
