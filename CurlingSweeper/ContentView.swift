@@ -69,11 +69,11 @@ struct WorkoutView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Ready for Shot button
+            // Sweep button
             Button {
                 showingShotTimer = true
             } label: {
-                Text("Ready for Shot")
+                Text("Sweep")
                     .font(.title3.bold())
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
