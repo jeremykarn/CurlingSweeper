@@ -218,6 +218,8 @@ struct ContentView: View {
 struct DebugFileBrowserView: View {
     @Environment(PhoneConnectivityManager.self) var connectivityManager
     @State private var chartData: [AccelDataPoint] = []
+    @State private var visibleDomainLength: Double = 4.0  // Seconds visible on screen
+    @State private var lastScaleValue: CGFloat = 1.0
 
     /// Timestamps where stroke count changes
     private var strokeChangeTimestamps: [Double] {
@@ -354,8 +356,33 @@ struct DebugFileBrowserView: View {
                         .chartXAxisLabel("Time (s)")
                         .chartYAxisLabel("Acceleration (g)")
                         .chartScrollableAxes(.horizontal)
-                        .chartXVisibleDomain(length: 4)
+                        .chartXVisibleDomain(length: visibleDomainLength)
                         .frame(height: 300)
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let delta = value / lastScaleValue
+                                    lastScaleValue = value
+                                    // Pinch out = zoom in (smaller domain), pinch in = zoom out (larger domain)
+                                    let newLength = visibleDomainLength / delta
+                                    // Clamp between 1 second and total duration
+                                    let maxDomain = max(chartData.last?.timestamp ?? 30, 30)
+                                    visibleDomainLength = min(max(newLength, 1), maxDomain)
+                                }
+                                .onEnded { _ in
+                                    lastScaleValue = 1.0
+                                }
+                        )
+
+                        // Zoom level indicator
+                        HStack {
+                            Image(systemName: "minus.magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            Slider(value: $visibleDomainLength, in: 1...(chartData.last?.timestamp ?? 30))
+                            Image(systemName: "plus.magnifyingglass")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
                     }
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
