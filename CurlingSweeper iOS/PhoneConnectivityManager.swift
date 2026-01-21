@@ -9,6 +9,19 @@ import Foundation
 import WatchConnectivity
 import Observation
 
+// MARK: - Debug File Info
+
+struct DebugFileInfo: Identifiable, Hashable {
+    let id = UUID()
+    let url: URL
+    let workoutDate: String  // yyyy-MM-dd_HH-mm
+    let displayDate: String  // Formatted for display
+    let end: Int
+    let shot: Int
+
+    var fileName: String { url.lastPathComponent }
+}
+
 @Observable
 @MainActor
 final class PhoneConnectivityManager: NSObject {
@@ -33,6 +46,16 @@ final class PhoneConnectivityManager: NSObject {
     var strokeCount: Int = 0
     var currentEnd: Int = 0
     var lastStatusUpdate: Date?
+
+    // Debug file browser
+    var debugFiles: [DebugFileInfo] = []
+    var availableWorkoutDates: [String] = []
+    var selectedWorkoutDate: String?
+    var availableEnds: [Int] = []
+    var selectedEnd: Int?
+    var availableShots: [Int] = []
+    var selectedShot: Int?
+    var selectedFileContent: String?
 
     private var session: WCSession?
 
@@ -118,6 +141,155 @@ final class PhoneConnectivityManager: NSObject {
         } catch {
             print("Failed to save CSV to Documents: \(error)")
         }
+    }
+
+    // MARK: - Debug File Browser
+
+    /// Scans Documents directory for workout debug files
+    func scanDebugFiles() {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
+            let csvFiles = files.filter { $0.pathExtension == "csv" }
+
+            // Parse filenames: workout_[yyyy-MM-dd_HH-mm]_end-[N]_shot-[M].csv
+            let regex = try NSRegularExpression(pattern: #"workout_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})_end-(\d+)_shot-(\d+)\.csv"#)
+
+            var parsed: [DebugFileInfo] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm"
+
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateFormat = "MMM d, yyyy h:mm a"
+
+            for file in csvFiles {
+                let filename = file.lastPathComponent
+                let range = NSRange(filename.startIndex..<filename.endIndex, in: filename)
+
+                if let match = regex.firstMatch(in: filename, range: range) {
+                    let dateRange = Range(match.range(at: 1), in: filename)!
+                    let endRange = Range(match.range(at: 2), in: filename)!
+                    let shotRange = Range(match.range(at: 3), in: filename)!
+
+                    let workoutDate = String(filename[dateRange])
+                    let end = Int(filename[endRange]) ?? 0
+                    let shot = Int(filename[shotRange]) ?? 0
+
+                    var displayDate = workoutDate
+                    if let date = dateFormatter.date(from: workoutDate) {
+                        displayDate = displayFormatter.string(from: date)
+                    }
+
+                    parsed.append(DebugFileInfo(url: file, workoutDate: workoutDate, displayDate: displayDate, end: end, shot: shot))
+                }
+            }
+
+            // Sort by date descending, then end, then shot
+            debugFiles = parsed.sorted {
+                if $0.workoutDate != $1.workoutDate { return $0.workoutDate > $1.workoutDate }
+                if $0.end != $1.end { return $0.end < $1.end }
+                return $0.shot < $1.shot
+            }
+
+            // Update available workout dates
+            let dates = Set(debugFiles.map { $0.workoutDate })
+            availableWorkoutDates = dates.sorted().reversed()
+
+            // Auto-select first date if none selected
+            if selectedWorkoutDate == nil && !availableWorkoutDates.isEmpty {
+                selectWorkoutDate(availableWorkoutDates[0])
+            } else if let date = selectedWorkoutDate {
+                // Refresh ends for current selection
+                updateAvailableEnds(for: date)
+            }
+
+        } catch {
+            print("Failed to scan debug files: \(error)")
+        }
+    }
+
+    /// Select a workout date and update available ends
+    func selectWorkoutDate(_ date: String) {
+        selectedWorkoutDate = date
+        updateAvailableEnds(for: date)
+    }
+
+    private func updateAvailableEnds(for date: String) {
+        let ends = Set(debugFiles.filter { $0.workoutDate == date }.map { $0.end })
+        availableEnds = ends.sorted()
+
+        // Auto-select first end if current selection is invalid
+        if selectedEnd == nil || !availableEnds.contains(selectedEnd!) {
+            if let firstEnd = availableEnds.first {
+                selectEnd(firstEnd)
+            } else {
+                selectedEnd = nil
+                availableShots = []
+                selectedShot = nil
+                selectedFileContent = nil
+            }
+        } else if let end = selectedEnd {
+            updateAvailableShots(for: date, end: end)
+        }
+    }
+
+    /// Select an end and update available shots
+    func selectEnd(_ end: Int) {
+        selectedEnd = end
+        if let date = selectedWorkoutDate {
+            updateAvailableShots(for: date, end: end)
+        }
+    }
+
+    private func updateAvailableShots(for date: String, end: Int) {
+        let shots = Set(debugFiles.filter { $0.workoutDate == date && $0.end == end }.map { $0.shot })
+        availableShots = shots.sorted()
+
+        // Auto-select first shot if current selection is invalid
+        if selectedShot == nil || !availableShots.contains(selectedShot!) {
+            if let firstShot = availableShots.first {
+                selectShot(firstShot)
+            } else {
+                selectedShot = nil
+                selectedFileContent = nil
+            }
+        } else if let shot = selectedShot {
+            loadSelectedFile(date: date, end: end, shot: shot)
+        }
+    }
+
+    /// Select a shot and load the file content
+    func selectShot(_ shot: Int) {
+        selectedShot = shot
+        if let date = selectedWorkoutDate, let end = selectedEnd {
+            loadSelectedFile(date: date, end: end, shot: shot)
+        }
+    }
+
+    private func loadSelectedFile(date: String, end: Int, shot: Int) {
+        guard let file = debugFiles.first(where: { $0.workoutDate == date && $0.end == end && $0.shot == shot }) else {
+            selectedFileContent = nil
+            return
+        }
+
+        do {
+            selectedFileContent = try String(contentsOf: file.url, encoding: .utf8)
+        } catch {
+            print("Failed to load file: \(error)")
+            selectedFileContent = nil
+        }
+    }
+
+    /// Get display string for workout date
+    func displayDate(for workoutDate: String) -> String {
+        debugFiles.first { $0.workoutDate == workoutDate }?.displayDate ?? workoutDate
+    }
+
+    /// Get URL for currently selected file
+    func getSelectedFileURL() -> URL? {
+        guard let date = selectedWorkoutDate, let end = selectedEnd, let shot = selectedShot else { return nil }
+        return debugFiles.first { $0.workoutDate == date && $0.end == end && $0.shot == shot }?.url
     }
 }
 
