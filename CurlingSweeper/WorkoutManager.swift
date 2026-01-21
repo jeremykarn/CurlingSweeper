@@ -61,8 +61,8 @@ final class WorkoutManager {
     // Motion detection - Garmin algorithm
     private let motionManager = CMMotionManager()
 
-    // Sweep detection thresholds
-    private let sweepThresholdY: Double = 1.0  // Minimum Y amplitude to count as valid sweep motion
+    // Sweep detection thresholds (using userAcceleration with gravity removed)
+    private let sweepThresholdY: Double = 0.5  // Minimum Y amplitude to count as valid sweep motion
     private var lastYSign: Int = 0             // -1 for negative, 0 for neutral, 1 for positive
     private var peakYInPhase: Double = 0       // Track peak |Y| in current phase
     private var lastStrokeTime: Date?          // Time of last stroke for debouncing
@@ -210,22 +210,22 @@ final class WorkoutManager {
     // MARK: - Brush Stroke Detection
 
     private func startMotionUpdates() {
-        guard motionManager.isAccelerometerAvailable else {
-            print("Accelerometer not available")
+        guard motionManager.isDeviceMotionAvailable else {
+            print("Device motion not available")
             return
         }
 
-        motionManager.accelerometerUpdateInterval = 1.0 / 60.0  // 60Hz for better stroke detection
-        motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, error in
-            guard let self = self, let data = data else { return }
+        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0  // 60Hz for better stroke detection
+        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+            guard let self = self, let motion = motion else { return }
             Task { @MainActor in
-                self.processAccelerometerData(data)
+                self.processMotionData(motion)
             }
         }
     }
 
     private func stopMotionUpdates() {
-        motionManager.stopAccelerometerUpdates()
+        motionManager.stopDeviceMotionUpdates()
         resetSweepDetection()
     }
 
@@ -235,10 +235,11 @@ final class WorkoutManager {
         lastStrokeTime = nil
     }
 
-    private func processAccelerometerData(_ data: CMAccelerometerData) {
-        let xAccel = data.acceleration.x
-        let yAccel = data.acceleration.y
-        let zAccel = data.acceleration.z
+    private func processMotionData(_ motion: CMDeviceMotion) {
+        // Use userAcceleration which has gravity removed
+        let xAccel = motion.userAcceleration.x
+        let yAccel = motion.userAcceleration.y
+        let zAccel = motion.userAcceleration.z
 
         // Only process when shot is active
         guard isShotActive, let startTime = shotStartTime else { return }
