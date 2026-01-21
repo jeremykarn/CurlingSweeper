@@ -40,9 +40,8 @@ final class WorkoutManager {
     // Debug mode for accelerometer recording
     var isDebugMode = false
     var debugSampleCount: Int = 0
-    var currentShotIndex: Int = 0
-    private var nextShotIndex: Int = 0
-    private var debugData: [(shot: Int, timestamp: TimeInterval, x: Double, y: Double, z: Double, strokes: Int)] = []
+    var currentShotInEnd: Int = 0    // Shot number within current end (1-based)
+    private var debugData: [(timestamp: TimeInterval, x: Double, y: Double, z: Double, strokes: Int)] = []
     private var shotStartTime: Date?
 
     // Callback for syncing status to phone
@@ -185,8 +184,7 @@ final class WorkoutManager {
         activeCalories = 0
         elapsedTime = 0
         currentEnd = 0
-        currentShotIndex = 0
-        nextShotIndex = 0
+        currentShotInEnd = 0
         isShotActive = false
         stopMotionUpdates()
         resetStrokeCount()
@@ -202,8 +200,9 @@ final class WorkoutManager {
     // MARK: - End Tracking
 
     func markNewEnd() {
-        sendAndClearDebugData()  // Auto-upload debug data at end of each end
+        sendAndClearDebugData()  // Auto-upload any remaining debug data
         currentEnd += 1
+        currentShotInEnd = 0  // Reset shot counter for new end
         isShotActive = false
         strokeCountEnd = 0  // Reset per-end stroke count
     }
@@ -250,7 +249,7 @@ final class WorkoutManager {
         // Record debug data if enabled
         if isDebugMode {
             let timestamp = Date().timeIntervalSince(startTime)
-            debugData.append((shot: currentShotIndex, timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
+            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, strokes: strokeCountEnd))
             debugSampleCount = debugData.count
         }
     }
@@ -314,17 +313,17 @@ final class WorkoutManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm"
         let dateStr = formatter.string(from: Date())
-        let fileName = "workout_\(dateStr)_end\(currentEnd).csv"
+        let fileName = "workout_\(dateStr)_end-\(currentEnd)_shot-\(currentShotInEnd).csv"
         onSendDebugData?(csv, fileName)
         clearDebugData()
     }
 
     /// Returns debug data as CSV string
     func getDebugCSV() -> String {
-        var csv = "shot,timestamp,x,y,z,strokes\n"
+        var csv = "timestamp,x,y,z,strokes\n"
         for sample in debugData {
-            csv += String(format: "%d,%.4f,%.6f,%.6f,%.6f,%d\n",
-                          sample.shot, sample.timestamp, sample.x, sample.y, sample.z, sample.strokes)
+            csv += String(format: "%.4f,%.6f,%.6f,%.6f,%d\n",
+                          sample.timestamp, sample.x, sample.y, sample.z, sample.strokes)
         }
         return csv
     }
@@ -370,15 +369,15 @@ final class WorkoutManager {
     // MARK: - Shot Tracking
 
     func startShot() {
+        currentShotInEnd += 1
         isShotActive = true
         shotStartTime = Date()
-        currentShotIndex = nextShotIndex
         resetSweepDetection()
     }
 
     func endShot() {
         isShotActive = false
-        nextShotIndex += 1
+        sendAndClearDebugData()  // Auto-upload debug data after each shot
         shotStartTime = nil
     }
 
