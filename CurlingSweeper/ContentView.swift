@@ -224,7 +224,7 @@ struct ShotTimerView: View {
                 .foregroundStyle(.green)
 
             Text("\(workoutManager.strokeCountEnd)")
-                .font(.system(size: 72, weight: .bold, design: .monospaced))
+                .font(.system(size: 48, weight: .bold, design: .monospaced))
                 .foregroundStyle(.cyan)
 
             Text("strokes this end")
