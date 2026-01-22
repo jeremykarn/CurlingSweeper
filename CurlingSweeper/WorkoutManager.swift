@@ -34,6 +34,7 @@ final class WorkoutManager {
     var currentEnd: Int = 0
 
     // Brush stroke counting
+    var strokeCountShot: Int = 0     // Strokes in current shot
     var strokeCountEnd: Int = 0      // Strokes in current end
     var strokeCountTotal: Int = 0    // Total strokes in workout
 
@@ -277,7 +278,7 @@ final class WorkoutManager {
         // Record debug data if enabled
         if isDebugMode {
             let timestamp = now.timeIntervalSince(startTime)
-            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, vx: velocityX, vy: velocityY, vz: velocityZ, strokes: strokeCountEnd))
+            debugData.append((timestamp: timestamp, x: xAccel, y: yAccel, z: zAccel, vx: velocityX, vy: velocityY, vz: velocityZ, strokes: strokeCountShot))
             debugSampleCount = debugData.count
         }
     }
@@ -325,11 +326,13 @@ final class WorkoutManager {
     }
 
     private func countStroke() {
+        strokeCountShot += 1
         strokeCountEnd += 1
         strokeCountTotal += 1
     }
 
     private func resetStrokeCount() {
+        strokeCountShot = 0
         strokeCountEnd = 0
         strokeCountTotal = 0
         resetSweepDetection()
@@ -412,6 +415,7 @@ final class WorkoutManager {
         currentShotInEnd += 1
         isShotActive = true
         shotStartTime = Date()
+        strokeCountShot = 0
         resetSweepDetection()
         resetVelocity()
     }

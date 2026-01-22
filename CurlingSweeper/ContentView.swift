@@ -69,17 +69,30 @@ struct WorkoutView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Sweep button
-            Button {
-                showingShotTimer = true
-            } label: {
-                Text("Sweep")
-                    .font(.title3.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+            // Sweep and Throw buttons
+            HStack(spacing: 8) {
+                Button {
+                    showingShotTimer = true
+                } label: {
+                    Text("Sweep")
+                        .font(.title3.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+
+                Button {
+                    showingShotTimer = true
+                } label: {
+                    Text("Throw")
+                        .font(.title3.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
 
             // Stats grid
             VStack(spacing: 8) {
@@ -223,11 +236,11 @@ struct ShotTimerView: View {
                 .font(.title2)
                 .foregroundStyle(.green)
 
-            Text("\(workoutManager.strokeCountEnd)")
+            Text("\(workoutManager.strokeCountShot)")
                 .font(.system(size: 48, weight: .bold, design: .monospaced))
                 .foregroundStyle(.cyan)
 
-            Text("strokes this end")
+            Text("strokes this shot")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
