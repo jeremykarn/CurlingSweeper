@@ -296,6 +296,21 @@ struct DebugFileBrowserView: View {
                 .padding()
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
 
+                // Shot type indicator
+                if let fileInfo = connectivityManager.getSelectedFileInfo() {
+                    HStack {
+                        Image(systemName: fileInfo.shotType == .sweep ? "figure.curling" : "figure.bowling")
+                            .font(.title2)
+                            .foregroundStyle(fileInfo.shotType == .sweep ? .blue : .orange)
+                        Text(fileInfo.shotType == .sweep ? "Sweep" : "Throw")
+                            .font(.headline)
+                            .foregroundStyle(fileInfo.shotType == .sweep ? .blue : .orange)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+
                 // Chart
                 if !chartData.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {

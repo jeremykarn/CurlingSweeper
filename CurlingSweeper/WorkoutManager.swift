@@ -29,6 +29,12 @@ final class WorkoutManager {
 
     // Shot tracking
     var isShotActive = false
+    var currentShotType: ShotType = .sweep
+
+    enum ShotType: String {
+        case sweep = "sweep"
+        case `throw` = "throw"
+    }
 
     // End tracking
     var currentEnd: Int = 0
@@ -347,7 +353,7 @@ final class WorkoutManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm"
         let dateStr = formatter.string(from: startDate ?? Date())
-        let fileName = "workout_\(dateStr)_end-\(currentEnd)_shot-\(currentShotInEnd).csv"
+        let fileName = "workout_\(dateStr)_end-\(currentEnd)_shot-\(currentShotInEnd)_\(currentShotType.rawValue).csv"
         onSendDebugData?(csv, fileName)
         clearDebugData()
     }
@@ -411,8 +417,9 @@ final class WorkoutManager {
 
     // MARK: - Shot Tracking
 
-    func startShot() {
+    func startShot(type: ShotType) {
         currentShotInEnd += 1
+        currentShotType = type
         isShotActive = true
         shotStartTime = Date()
         strokeCountShot = 0

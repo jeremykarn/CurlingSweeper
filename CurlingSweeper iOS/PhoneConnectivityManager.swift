@@ -11,6 +11,12 @@ import Observation
 
 // MARK: - Debug File Info
 
+enum ShotType: String {
+    case sweep = "sweep"
+    case `throw` = "throw"
+    case unknown = "unknown"
+}
+
 struct DebugFileInfo: Identifiable, Hashable {
     let id = UUID()
     let url: URL
@@ -18,6 +24,7 @@ struct DebugFileInfo: Identifiable, Hashable {
     let displayDate: String  // Formatted for display
     let end: Int
     let shot: Int
+    let shotType: ShotType
 
     var fileName: String { url.lastPathComponent }
 }
@@ -153,8 +160,8 @@ final class PhoneConnectivityManager: NSObject {
             let files = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
             let csvFiles = files.filter { $0.pathExtension == "csv" }
 
-            // Parse filenames: workout_[yyyy-MM-dd_HH-mm]_end-[N]_shot-[M].csv
-            let regex = try NSRegularExpression(pattern: #"workout_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})_end-(\d+)_shot-(\d+)\.csv"#)
+            // Parse filenames: workout_[yyyy-MM-dd_HH-mm]_end-[N]_shot-[M]_[sweep|throw].csv
+            let regex = try NSRegularExpression(pattern: #"workout_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})_end-(\d+)_shot-(\d+)_(sweep|throw)\.csv"#)
 
             var parsed: [DebugFileInfo] = []
             let dateFormatter = DateFormatter()
@@ -171,17 +178,19 @@ final class PhoneConnectivityManager: NSObject {
                     let dateRange = Range(match.range(at: 1), in: filename)!
                     let endRange = Range(match.range(at: 2), in: filename)!
                     let shotRange = Range(match.range(at: 3), in: filename)!
+                    let typeRange = Range(match.range(at: 4), in: filename)!
 
                     let workoutDate = String(filename[dateRange])
                     let end = Int(filename[endRange]) ?? 0
                     let shot = Int(filename[shotRange]) ?? 0
+                    let shotType = ShotType(rawValue: String(filename[typeRange])) ?? .unknown
 
                     var displayDate = workoutDate
                     if let date = dateFormatter.date(from: workoutDate) {
                         displayDate = displayFormatter.string(from: date)
                     }
 
-                    parsed.append(DebugFileInfo(url: file, workoutDate: workoutDate, displayDate: displayDate, end: end, shot: shot))
+                    parsed.append(DebugFileInfo(url: file, workoutDate: workoutDate, displayDate: displayDate, end: end, shot: shot, shotType: shotType))
                 }
             }
 
@@ -288,8 +297,12 @@ final class PhoneConnectivityManager: NSObject {
 
     /// Get URL for currently selected file
     func getSelectedFileURL() -> URL? {
+        getSelectedFileInfo()?.url
+    }
+
+    func getSelectedFileInfo() -> DebugFileInfo? {
         guard let date = selectedWorkoutDate, let end = selectedEnd, let shot = selectedShot else { return nil }
-        return debugFiles.first { $0.workoutDate == date && $0.end == end && $0.shot == shot }?.url
+        return debugFiles.first { $0.workoutDate == date && $0.end == end && $0.shot == shot }
     }
 }
 

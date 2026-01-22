@@ -66,12 +66,14 @@ struct WorkoutView: View {
     @Environment(WorkoutManager.self) var workoutManager
     @State private var showingEndConfirmation = false
     @State private var showingShotTimer = false
+    @State private var selectedShotType: WorkoutManager.ShotType = .sweep
 
     var body: some View {
         VStack(spacing: 8) {
             // Sweep and Throw buttons
             HStack(spacing: 8) {
                 Button {
+                    selectedShotType = .sweep
                     showingShotTimer = true
                 } label: {
                     Text("Sweep")
@@ -83,6 +85,7 @@ struct WorkoutView: View {
                 .tint(.blue)
 
                 Button {
+                    selectedShotType = .throw
                     showingShotTimer = true
                 } label: {
                     Text("Throw")
@@ -204,7 +207,7 @@ struct WorkoutView: View {
         }
         .padding()
         .fullScreenCover(isPresented: $showingShotTimer) {
-            ShotTimerView(isPresented: $showingShotTimer)
+            ShotTimerView(isPresented: $showingShotTimer, shotType: selectedShotType)
         }
         .confirmationDialog("End Workout?", isPresented: $showingEndConfirmation) {
             Button("Save") {
@@ -227,14 +230,15 @@ struct WorkoutView: View {
 struct ShotTimerView: View {
     @Environment(WorkoutManager.self) var workoutManager
     @Binding var isPresented: Bool
+    let shotType: WorkoutManager.ShotType
 
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
 
-            Text("Tracking Strokes")
+            Text(shotType == .sweep ? "Sweeping" : "Throwing")
                 .font(.title2)
-                .foregroundStyle(.green)
+                .foregroundStyle(shotType == .sweep ? .blue : .orange)
 
             Text("\(workoutManager.strokeCountShot)")
                 .font(.system(size: 48, weight: .bold, design: .monospaced))
@@ -263,7 +267,7 @@ struct ShotTimerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .onAppear {
-            workoutManager.startShot()
+            workoutManager.startShot(type: shotType)
         }
         .onDisappear {
             // Ensure shot ends if view is dismissed another way
