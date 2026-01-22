@@ -153,23 +153,6 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        // Last 10 lines preview
-                        if !connectivityManager.debugLastLines.isEmpty {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Last 10 samples:")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                ForEach(Array(connectivityManager.debugLastLines.enumerated()), id: \.offset) { _, line in
-                                    Text(line)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        }
-
                         // Share button
                         if let url = connectivityManager.getReceivedDataURL() {
                             ShareLink(item: url) {

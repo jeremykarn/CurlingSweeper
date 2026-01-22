@@ -42,7 +42,6 @@ final class PhoneConnectivityManager: NSObject {
 
     // Cached parsed debug data
     var debugSampleCount: Int = 0
-    var debugLastLines: [String] = []
     var savedFileURL: URL?
 
     // Workout status from watch
@@ -125,14 +124,11 @@ final class PhoneConnectivityManager: NSObject {
         lastReceivedDate = nil
         receivedFileName = nil
         debugSampleCount = 0
-        debugLastLines = []
     }
 
     private func parseDebugData(_ csvData: String) {
         let lines = csvData.components(separatedBy: "\n")
         debugSampleCount = max(0, lines.count - 2) // Subtract header and trailing newline
-        let dataLines = lines.dropFirst().filter { !$0.isEmpty }
-        debugLastLines = Array(dataLines.suffix(10))
     }
 
     /// Saves CSV data to the Documents directory

@@ -76,11 +76,11 @@ final class WorkoutManager {
     private let motionManager = CMMotionManager()
 
     // Sweep detection thresholds (using userAcceleration with gravity removed)
-    private let sweepThresholdY: Double = 0.5  // Minimum Y amplitude to count as valid sweep motion
+    private let sweepThresholdY: Double = 1.0  // Minimum Y amplitude to count as valid sweep motion
     private var lastYSign: Int = 0             // -1 for negative, 0 for neutral, 1 for positive
     private var peakYInPhase: Double = 0       // Track peak |Y| in current phase
     private var lastStrokeTime: Date?          // Time of last stroke for debouncing
-    private let minStrokeInterval: TimeInterval = 0.08  // Minimum 80ms between strokes
+    private let minStrokeInterval: TimeInterval = 0.16  // Minimum 160ms between strokes
     private var timer: Timer?
     private var delegateHandler: WorkoutDelegateHandler?
 
