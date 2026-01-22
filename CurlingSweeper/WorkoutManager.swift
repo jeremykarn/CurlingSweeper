@@ -283,7 +283,7 @@ final class WorkoutManager {
     }
 
     /// Stroke detection based on Y-axis zero-crossings with amplitude threshold
-    /// Counts a stroke when Y changes sign and the previous phase exceeded the amplitude threshold
+    /// Counts a stroke when Y crosses from negative to positive (one full back-and-forth sweep)
     private func detectSweep(_ yAccel: Double) {
         // Determine current sign: -1 for negative, 1 for positive, 0 for near-zero
         let currentSign: Int
@@ -300,9 +300,9 @@ final class WorkoutManager {
             peakYInPhase = abs(yAccel)
         }
 
-        // Detect sign change (zero crossing)
-        if currentSign != 0 && lastYSign != 0 && currentSign != lastYSign {
-            // Sign changed - check if previous phase had enough amplitude
+        // Detect zero crossing from negative to positive only (one full sweep = one stroke)
+        if lastYSign == -1 && currentSign == 1 {
+            // Crossed from negative to positive - check if phase had enough amplitude
             if peakYInPhase >= sweepThresholdY {
                 // Check debounce
                 let now = Date()
@@ -312,6 +312,9 @@ final class WorkoutManager {
                 }
             }
             // Reset peak for new phase
+            peakYInPhase = abs(yAccel)
+        } else if currentSign != 0 && lastYSign != 0 && currentSign != lastYSign {
+            // Other direction crossing - just reset peak, don't count
             peakYInPhase = abs(yAccel)
         }
 
@@ -340,7 +343,7 @@ final class WorkoutManager {
         let csv = getDebugCSV()
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm"
-        let dateStr = formatter.string(from: Date())
+        let dateStr = formatter.string(from: startDate ?? Date())
         let fileName = "workout_\(dateStr)_end-\(currentEnd)_shot-\(currentShotInEnd).csv"
         onSendDebugData?(csv, fileName)
         clearDebugData()
